@@ -1,11 +1,14 @@
 import { useState } from "react";
-import { LogOut, Gem, Menu, X, ChevronDown } from "lucide-react";
+import { LogOut, Gem, Menu, X, ChevronDown, Download } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { usePWAInstall } from "../../hooks/usePWAInstall";
 import toast from "react-hot-toast";
 
 export default function Navbar() {
   const { currentUser, logout } = useAuth();
+  const { isInstallable, isInstalled, installApp } = usePWAInstall();
   const [menuOpen, setMenuOpen] = useState(false);
+
 
   const handleLogout = async () => {
     try {
@@ -42,6 +45,17 @@ export default function Navbar() {
 
           {/* ── Desktop user menu ── */}
           <div className="hidden sm:flex items-center gap-3">
+            {isInstallable && !isInstalled && (
+              <button
+                onClick={installApp}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 hover:text-indigo-200 text-xs font-semibold transition-all duration-200"
+                title="Install App on Device"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Install App</span>
+              </button>
+            )}
+
             <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-slate-800/60 border border-slate-700/50">
               <div className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold">
                 {avatar}
@@ -78,6 +92,18 @@ export default function Navbar() {
               </div>
               <span className="text-slate-300 text-sm truncate">{currentUser?.email}</span>
             </div>
+            {isInstallable && !isInstalled && (
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  installApp();
+                }}
+                className="flex items-center gap-2 w-full px-4 py-2.5 rounded-xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-300 text-sm font-semibold"
+              >
+                <Download className="w-4 h-4" />
+                Install Web App
+              </button>
+            )}
             <button
               onClick={handleLogout}
               className="flex items-center gap-2 w-full px-4 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm font-medium"
