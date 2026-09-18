@@ -7,6 +7,7 @@ export function usePWAInstall() {
   const [deferredPrompt, setDeferredPrompt] = useState(globalDeferredPrompt);
   const [isInstalled, setIsInstalled] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
     // Check if already in standalone mode
@@ -34,6 +35,7 @@ export function usePWAInstall() {
       globalDeferredPrompt = null;
       setDeferredPrompt(null);
       setIsInstalled(true);
+      setIsModalOpen(false);
       toast.success("Shivaayaha Ledger installed as an app!");
     };
 
@@ -48,32 +50,32 @@ export function usePWAInstall() {
 
   const installApp = async () => {
     if (!deferredPrompt) {
-      if (isIOS) {
-        toast(
-          "To install on iOS: Tap the Share button (⎋) in Safari and select 'Add to Home Screen' (+).",
-          { icon: "📱", duration: 6000 }
-        );
-      } else {
-        toast("App installation is supported via your browser menu (Add to Home Screen / Install).", {
-          icon: "ℹ️",
-        });
-      }
+      // If native prompt is not available, show visual instructions modal
+      setIsModalOpen(true);
       return;
     }
 
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === "accepted") {
-      setDeferredPrompt(null);
-      globalDeferredPrompt = null;
+    try {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === "accepted") {
+        setDeferredPrompt(null);
+        globalDeferredPrompt = null;
+        setIsModalOpen(false);
+      }
+    } catch {
+      setIsModalOpen(true);
     }
   };
 
   return {
-    isInstallable: !!deferredPrompt || isIOS,
+    isInstallable: !isInstalled,
     hasNativePrompt: !!deferredPrompt,
     isInstalled,
     isIOS,
+    isModalOpen,
+    openModal: () => setIsModalOpen(true),
+    closeModal: () => setIsModalOpen(false),
     installApp,
   };
 }

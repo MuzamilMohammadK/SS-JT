@@ -2,12 +2,22 @@ import { useState } from "react";
 import { LogOut, Gem, Menu, X, ChevronDown, Download } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { usePWAInstall } from "../../hooks/usePWAInstall";
+import InstallModal from "./InstallModal";
 import toast from "react-hot-toast";
 
 export default function Navbar() {
   const { currentUser, logout } = useAuth();
-  const { isInstallable, isInstalled, installApp } = usePWAInstall();
+  const {
+    isInstallable,
+    isInstalled,
+    installApp,
+    isModalOpen,
+    closeModal,
+    isIOS,
+    hasNativePrompt,
+  } = usePWAInstall();
   const [menuOpen, setMenuOpen] = useState(false);
+
 
 
   const handleLogout = async () => {
@@ -114,6 +124,16 @@ export default function Navbar() {
           </div>
         )}
       </div>
+
+      {/* ── Install Instructions Modal ── */}
+      <InstallModal
+        isOpen={isModalOpen}
+        onClose={closeModal}
+        isIOS={isIOS}
+        onNativeInstall={installApp}
+        hasNativePrompt={hasNativePrompt}
+      />
     </header>
   );
+
 }
