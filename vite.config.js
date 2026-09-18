@@ -20,6 +20,7 @@ export default defineConfig({
 
       // Web App Manifest — controls how the app appears when installed
       manifest: {
+        id: "/",
         name: "Shivaayaha Silks & Jari Trades",
         short_name: "SS Ledger",
         description:
@@ -34,19 +35,19 @@ export default defineConfig({
         categories: ["finance", "business", "productivity"],
         icons: [
           {
-            src: "icon-192.png",
+            src: "/icon-192.png",
             sizes: "192x192",
             type: "image/png",
             purpose: "any",
           },
           {
-            src: "icon-512.png",
+            src: "/icon-512.png",
             sizes: "512x512",
             type: "image/png",
             purpose: "any",
           },
           {
-            src: "icon-maskable.png",
+            src: "/icon-maskable.png",
             sizes: "512x512",
             type: "image/png",
             purpose: "maskable",
@@ -58,7 +59,7 @@ export default defineConfig({
             short_name: "Dashboard",
             description: "Open the ledger dashboard",
             url: "/",
-            icons: [{ src: "icon-192.png", sizes: "192x192" }],
+            icons: [{ src: "/icon-192.png", sizes: "192x192" }],
           },
         ],
       },
