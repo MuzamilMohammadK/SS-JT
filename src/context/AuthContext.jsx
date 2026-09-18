@@ -31,7 +31,13 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={{ currentUser, register, login, logout, loading }}>
-      {!loading && children}
+      {loading ? (
+        <div className="min-h-dvh bg-slate-950 flex flex-col items-center justify-center gap-3">
+          <div className="spinner" />
+        </div>
+      ) : (
+        children
+      )}
     </AuthContext.Provider>
   );
 }

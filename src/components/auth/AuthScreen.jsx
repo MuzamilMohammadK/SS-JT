@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { useNavigate, Navigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { validateEmail, validatePassword, firebaseAuthError } from "../../utils/validators";
 import { Gem, Mail, Lock, Eye, EyeOff, AlertCircle, Loader2, UserPlus, LogIn } from "lucide-react";
 import toast from "react-hot-toast";
+
 
 // ── Field component ────────────────────────────────────────────
 function Field({ id, label, type = "text", value, onChange, error, placeholder, icon: Icon, rightSlot }) {
@@ -38,6 +40,7 @@ function Field({ id, label, type = "text", value, onChange, error, placeholder, 
 // ── Sign In Form ───────────────────────────────────────────────
 function SignInForm({ onSwitch }) {
   const { login } = useAuth();
+  const navigate  = useNavigate();
   const [form,    setForm]    = useState({ email: "", password: "" });
   const [errors,  setErrors]  = useState({});
   const [authErr, setAuthErr] = useState("");
@@ -68,6 +71,7 @@ function SignInForm({ onSwitch }) {
     try {
       await login(form.email.trim(), form.password);
       toast.success("Welcome back!");
+      navigate("/", { replace: true });
     } catch (err) {
       setAuthErr(firebaseAuthError(err.code));
     } finally {
@@ -118,6 +122,7 @@ function SignInForm({ onSwitch }) {
 // ── Register Form ─────────────────────────────────────────────
 function RegisterForm({ onSwitch }) {
   const { register } = useAuth();
+  const navigate     = useNavigate();
   const [form,    setForm]    = useState({ email: "", password: "", confirm: "" });
   const [errors,  setErrors]  = useState({});
   const [authErr, setAuthErr] = useState("");
@@ -149,6 +154,7 @@ function RegisterForm({ onSwitch }) {
     try {
       await register(form.email.trim(), form.password);
       toast.success("Account created successfully!");
+      navigate("/", { replace: true });
     } catch (err) {
       setAuthErr(firebaseAuthError(err.code));
     } finally {
@@ -203,7 +209,12 @@ function RegisterForm({ onSwitch }) {
 
 // ── AuthScreen (exported) ─────────────────────────────────────
 export default function AuthScreen() {
+  const { currentUser } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
+
+  if (currentUser) {
+    return <Navigate to="/" replace />;
+  }
 
   return (
     <div className="min-h-dvh bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
