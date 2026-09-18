@@ -43,9 +43,14 @@ jobs:
       - name: Build
         run: npm run build
 
-      # 6. Deploy to Firebase Hosting (only on push to main, not PRs)
+      # 6. Check if secret is configured
+      - name: Check Firebase Secret
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && secrets.FIREBASE_SERVICE_ACCOUNT == ''
+        run: echo "::warning::FIREBASE_SERVICE_ACCOUNT secret is not configured in GitHub Secrets. Skipping automatic hosting deployment."
+
+      # 7. Deploy to Firebase Hosting (only on push to main when secret is configured)
       - name: Deploy to Firebase Hosting
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && secrets.FIREBASE_SERVICE_ACCOUNT != ''
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
@@ -53,3 +58,4 @@ jobs:
           projectId: shivaayaha-silks-ledger
           target: shivaayaha-silks-ledger-4ace2
           channelId: live
+
