@@ -1,9 +1,9 @@
 {
   "projects": {
-    "default": "shivaayaha-silks-ledger-4ace2"
+    "default": "shivaayaha-silks-ledger"
   },
   "targets": {
-    "shivaayaha-silks-ledger-4ace2": {
+    "shivaayaha-silks-ledger": {
       "hosting": {
         "shivaayaha-silks-ledger-4ace2": [
           "shivaayaha-silks-ledger-4ace2"

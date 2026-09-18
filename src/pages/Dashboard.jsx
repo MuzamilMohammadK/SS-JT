@@ -1,90 +1,84 @@
 import Navbar from "../components/layout/Navbar";
-import SummaryCards from "../components/dashboard/SummaryCards";
-import PartyForm from "../components/parties/PartyForm";
-import PartyList from "../components/parties/PartyList";
+import SummaryBanner from "../components/dashboard/SummaryBanner";
+import PartyManager from "../components/parties/PartyManager";
 import TransactionForm from "../components/transactions/TransactionForm";
-import TransactionTable from "../components/transactions/TransactionTable";
+import LedgerTable from "../components/transactions/LedgerTable";
 import { useParties } from "../hooks/useParties";
 import { useTransactions } from "../hooks/useTransactions";
-import { Users, BookOpen, LayoutDashboard } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
+import { LayoutDashboard, Users, BookOpen } from "lucide-react";
 
-function SectionHeader({ icon: Icon, title, description, iconColor, iconBg }) {
+// ── Section divider ────────────────────────────────────────────
+function Divider({ label }) {
   return (
-    <div className="flex items-center gap-3 mb-4">
-      <div className={`flex items-center justify-center w-9 h-9 rounded-xl ${iconBg}`}>
+    <div className="section-divider">
+      <span className="text-slate-700 text-xs font-semibold uppercase tracking-widest px-3">
+        {label}
+      </span>
+    </div>
+  );
+}
+
+// ── Section header ─────────────────────────────────────────────
+function SectionHeader({ icon: Icon, title, sub, iconColor, iconBg }) {
+  return (
+    <div className="flex items-center gap-3 mb-5">
+      <div className={`w-9 h-9 rounded-xl ${iconBg} flex items-center justify-center`}>
         <Icon className={`w-5 h-5 ${iconColor}`} />
       </div>
       <div>
         <h2 className="section-title">{title}</h2>
-        {description && (
-          <p className="text-slate-500 text-xs mt-0.5">{description}</p>
-        )}
+        {sub && <p className="text-slate-500 text-xs mt-0.5">{sub}</p>}
       </div>
     </div>
   );
 }
 
-function Divider({ label }) {
-  return (
-    <div className="flex items-center gap-4 my-8">
-      <div className="flex-1 h-px bg-slate-800/80" />
-      <span className="text-slate-600 text-xs font-semibold uppercase tracking-widest px-2">
-        {label}
-      </span>
-      <div className="flex-1 h-px bg-slate-800/80" />
-    </div>
-  );
-}
-
+// ── Dashboard ─────────────────────────────────────────────────
 export default function Dashboard() {
-  const { parties, loading: pLoading, error: pError } = useParties();
-  const { transactions, loading: tLoading } = useTransactions();
+  const { currentUser } = useAuth();
+  const uid = currentUser?.uid;
+
+  const { parties,      loading: pLoading, error: pError } = useParties(uid);
+  const { transactions, loading: tLoading }                 = useTransactions(uid);
 
   return (
-    <div className="min-h-screen bg-slate-950">
+    <div className="min-h-dvh bg-slate-950">
       <Navbar />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+
         {/* ── Hero Banner ── */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-900/40 via-slate-900 to-purple-900/30 border border-indigo-800/30 p-6 md:p-8">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl" />
+        <div className="relative overflow-hidden rounded-2xl border border-indigo-800/25 bg-gradient-to-br from-indigo-950/60 via-slate-900 to-purple-950/40 p-6 md:p-8">
+          {/* Decorative orbs */}
+          <div className="absolute -top-16 -right-16 w-64 h-64 bg-indigo-500/8 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-12 -left-12 w-48 h-48 bg-purple-500/6 rounded-full blur-3xl pointer-events-none" />
+
           <div className="relative z-10">
-            <div className="flex items-center gap-2 mb-2">
-              <LayoutDashboard className="w-5 h-5 text-indigo-400" />
+            <div className="flex items-center gap-2 mb-3">
+              <LayoutDashboard className="w-4 h-4 text-indigo-400" />
               <span className="text-indigo-400 text-xs font-semibold uppercase tracking-widest">
                 Dashboard Overview
               </span>
             </div>
-            <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight">
-              Shivaayaha Silks &amp; Jari Trades
-            </h1>
-            <p className="text-slate-400 text-sm mt-1 max-w-lg">
-              Track accounts receivable, accounts payable, inventory transactions, and party
-              balances — all in real time.
+            <h1 className="page-title">Shivaayaha Silks &amp; Jari Trades</h1>
+            <p className="text-slate-400 text-sm mt-2 max-w-xl leading-relaxed">
+              Track accounts receivable, accounts payable, inventory transactions,
+              and party balances — all in real time.
             </p>
           </div>
         </div>
 
-        {/* ── Summary Cards ── */}
+        {/* ── Summary Metrics ── */}
         <section aria-label="Financial Summary">
-          <SummaryCards transactions={transactions} />
+          <SummaryBanner transactions={transactions} />
         </section>
 
         <Divider label="Party Management" />
 
         {/* ── Party Section ── */}
         <section aria-label="Party Management">
-          <PartyForm />
-          <div className="mt-6">
-            <SectionHeader
-              icon={Users}
-              title="Registered Parties"
-              description={`${parties.length} parties on record`}
-              iconColor="text-purple-400"
-              iconBg="bg-purple-500/15"
-            />
-            <PartyList parties={parties} loading={pLoading} error={pError} />
-          </div>
+          <PartyManager parties={parties} loading={pLoading} error={pError} />
         </section>
 
         <Divider label="Transaction Ledger" />
@@ -97,23 +91,19 @@ export default function Dashboard() {
             <SectionHeader
               icon={BookOpen}
               title="Transaction History"
-              description="Complete ledger of all given and taken transactions"
+              sub="Complete ledger of all given and taken transactions"
               iconColor="text-teal-400"
               iconBg="bg-teal-500/15"
             />
-            <TransactionTable
-              transactions={transactions}
-              parties={parties}
-              loading={tLoading}
-            />
+            <LedgerTable transactions={transactions} parties={parties} loading={tLoading} />
           </div>
         </section>
 
-        {/* Footer */}
-        <footer className="pt-4 pb-6 border-t border-slate-800/60">
+        {/* ── Footer ── */}
+        <footer className="pt-4 pb-6 border-t border-slate-800/50">
           <p className="text-center text-slate-700 text-xs">
-            Shivaayaha Silks &amp; Jari Trades · Ledger Management System · Client-Side · Powered
-            by Firebase
+            Shivaayaha Silks &amp; Jari Trades · Ledger Management System ·
+            Client-Side · Powered by Firebase
           </p>
         </footer>
       </main>

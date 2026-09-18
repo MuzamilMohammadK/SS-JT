@@ -1,46 +1,35 @@
 import { useEffect, useState } from "react";
-import {
-  collection,
-  onSnapshot,
-  query,
-  orderBy,
-} from "firebase/firestore";
-import { db } from "../firebase/config";
+import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
+import { db } from "../services/firebase";
 
 /**
- * Real-time Firestore listener for the `parties` collection.
- * Returns an array of party documents sorted by createdAt descending.
+ * Real-time listener for users/{uid}/parties, sorted by createdAt desc.
+ * @param {string|null} uid
  */
-export function useParties() {
+export function useParties(uid) {
   const [parties, setParties] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error,   setError]   = useState(null);
 
   useEffect(() => {
+    if (!uid) { setParties([]); setLoading(false); return; }
+
     const q = query(
-      collection(db, "parties"),
+      collection(db, "users", uid, "parties"),
       orderBy("createdAt", "desc")
     );
 
-    const unsubscribe = onSnapshot(
+    const unsub = onSnapshot(
       q,
-      (snapshot) => {
-        const data = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        setParties(data);
+      (snap) => {
+        setParties(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
         setLoading(false);
       },
-      (err) => {
-        console.error("useParties error:", err);
-        setError(err.message);
-        setLoading(false);
-      }
+      (err) => { console.error("useParties:", err); setError(err.message); setLoading(false); }
     );
 
-    return () => unsubscribe();
-  }, []);
+    return unsub;
+  }, [uid]);
 
   return { parties, loading, error };
 }

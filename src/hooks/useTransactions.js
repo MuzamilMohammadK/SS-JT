@@ -1,46 +1,35 @@
 import { useEffect, useState } from "react";
-import {
-  collection,
-  onSnapshot,
-  query,
-  orderBy,
-} from "firebase/firestore";
-import { db } from "../firebase/config";
+import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
+import { db } from "../services/firebase";
 
 /**
- * Real-time Firestore listener for the `transactions` collection.
- * Returns an array of transaction documents sorted by transactionDate descending.
+ * Real-time listener for users/{uid}/transactions, sorted by transactionDate desc.
+ * @param {string|null} uid
  */
-export function useTransactions() {
+export function useTransactions(uid) {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error,   setError]   = useState(null);
 
   useEffect(() => {
+    if (!uid) { setTransactions([]); setLoading(false); return; }
+
     const q = query(
-      collection(db, "transactions"),
+      collection(db, "users", uid, "transactions"),
       orderBy("transactionDate", "desc")
     );
 
-    const unsubscribe = onSnapshot(
+    const unsub = onSnapshot(
       q,
-      (snapshot) => {
-        const data = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        setTransactions(data);
+      (snap) => {
+        setTransactions(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
         setLoading(false);
       },
-      (err) => {
-        console.error("useTransactions error:", err);
-        setError(err.message);
-        setLoading(false);
-      }
+      (err) => { console.error("useTransactions:", err); setError(err.message); setLoading(false); }
     );
 
-    return () => unsubscribe();
-  }, []);
+    return unsub;
+  }, [uid]);
 
   return { transactions, loading, error };
 }

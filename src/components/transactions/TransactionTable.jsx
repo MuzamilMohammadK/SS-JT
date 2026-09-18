@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../../firebase/config";
+import { useAuth } from "../../context/AuthContext";
 import {
   CheckCircle2,
   Clock,
@@ -10,9 +11,52 @@ import {
   ChevronUp,
   IndianRupee,
   Filter,
+  Trash2,
+  AlertTriangle,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
+// ── Confirmation Dialog ───────────────────────────────────────
+function ConfirmDialog({ message, onConfirm, onCancel }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        onClick={onCancel}
+      />
+      {/* Panel */}
+      <div className="relative z-10 bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl animate-fade-in-scale">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-rose-500/15">
+            <AlertTriangle className="w-5 h-5 text-rose-400" />
+          </div>
+          <div>
+            <p className="text-slate-100 font-semibold text-sm">Confirm Delete</p>
+            <p className="text-slate-500 text-xs mt-0.5">{message}</p>
+          </div>
+        </div>
+        <div className="flex gap-3 justify-end">
+          <button
+            onClick={onCancel}
+            className="btn-secondary text-xs px-4 py-2"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 text-rose-300 text-xs font-semibold transition-all duration-200"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Status & Type Badges ──────────────────────────────────────
 function StatusBadge({ status }) {
   return status === "Settled" ? (
     <span className="badge bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
@@ -37,9 +81,12 @@ function TypeBadge({ type }) {
   );
 }
 
-function TransactionRow({ tx, partyName, onSettle }) {
+// ── Single Transaction Row ────────────────────────────────────
+function TransactionRow({ tx, partyName, uid }) {
   const [expanded, setExpanded] = useState(false);
   const [settling, setSettling] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const fmt = (n) =>
     new Intl.NumberFormat("en-IN", {
@@ -48,13 +95,15 @@ function TransactionRow({ tx, partyName, onSettle }) {
       maximumFractionDigits: 2,
     }).format(n || 0);
 
+  // Mark transaction as Settled + store settledAt timestamp for audit trail
   const handleSettle = async () => {
     setSettling(true);
     try {
-      await updateDoc(doc(db, "transactions", tx.id), {
+      await updateDoc(doc(db, "users", uid, "transactions", tx.id), {
         status: "Settled",
         pendingDue: 0,
         amountPaid: tx.totalAmount,
+        settledAt: serverTimestamp(),
       });
       toast.success("Transaction marked as Settled.");
     } catch (err) {
@@ -62,6 +111,21 @@ function TransactionRow({ tx, partyName, onSettle }) {
       console.error(err);
     } finally {
       setSettling(false);
+    }
+  };
+
+  // Delete transaction after confirmation
+  const handleDelete = async () => {
+    setShowDeleteConfirm(false);
+    setDeleting(true);
+    try {
+      await deleteDoc(doc(db, "users", uid, "transactions", tx.id));
+      toast.success("Transaction deleted.");
+    } catch (err) {
+      toast.error("Failed to delete transaction.");
+      console.error(err);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -75,6 +139,15 @@ function TransactionRow({ tx, partyName, onSettle }) {
 
   return (
     <>
+      {/* Confirmation dialog — rendered in a portal-like fixed overlay */}
+      {showDeleteConfirm && (
+        <ConfirmDialog
+          message="This transaction will be permanently removed. This action cannot be undone."
+          onConfirm={handleDelete}
+          onCancel={() => setShowDeleteConfirm(false)}
+        />
+      )}
+
       <tr className="border-b border-slate-800/60 hover:bg-slate-800/30 transition-colors">
         {/* Date */}
         <td className="px-4 py-3 text-slate-400 text-xs font-medium whitespace-nowrap">
@@ -107,6 +180,7 @@ function TransactionRow({ tx, partyName, onSettle }) {
         {/* Actions */}
         <td className="px-4 py-3">
           <div className="flex items-center gap-2">
+            {/* Settle button — only for pending */}
             {tx.status === "Pending" && (
               <button
                 onClick={handleSettle}
@@ -121,6 +195,22 @@ function TransactionRow({ tx, partyName, onSettle }) {
                 Settle
               </button>
             )}
+
+            {/* Delete button */}
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              disabled={deleting}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 text-xs font-semibold transition-all duration-200 disabled:opacity-50"
+              title="Delete transaction"
+            >
+              {deleting ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Trash2 className="w-3 h-3" />
+              )}
+            </button>
+
+            {/* Expand / collapse */}
             <button
               onClick={() => setExpanded((v) => !v)}
               className="text-slate-500 hover:text-slate-300 transition-colors"
@@ -152,10 +242,21 @@ function TransactionRow({ tx, partyName, onSettle }) {
                   <div>
                     <p className="text-slate-200 text-xs font-semibold">{s.sareeName}</p>
                     <p className="text-slate-500 text-xs">
-                      {s.quantity} pcs × {fmt(s.pricePerUnit)}
+                      {s.quantity} pcs ×{" "}
+                      {new Intl.NumberFormat("en-IN", {
+                        style: "currency",
+                        currency: "INR",
+                        maximumFractionDigits: 2,
+                      }).format(s.pricePerUnit)}
                     </p>
                   </div>
-                  <p className="text-indigo-300 text-xs font-bold">{fmt(s.lineTotal)}</p>
+                  <p className="text-indigo-300 text-xs font-bold">
+                    {new Intl.NumberFormat("en-IN", {
+                      style: "currency",
+                      currency: "INR",
+                      maximumFractionDigits: 2,
+                    }).format(s.lineTotal)}
+                  </p>
                 </div>
               ))}
             </div>
@@ -169,7 +270,11 @@ function TransactionRow({ tx, partyName, onSettle }) {
   );
 }
 
+// ── Main TransactionTable Component ──────────────────────────
 export default function TransactionTable({ transactions, parties, loading }) {
+  const { currentUser } = useAuth();
+  const uid = currentUser?.uid;
+
   const [statusFilter, setStatusFilter] = useState("All");
   const [partyFilter, setPartyFilter] = useState("All");
   const [typeFilter, setTypeFilter] = useState("All");
@@ -287,6 +392,7 @@ export default function TransactionTable({ transactions, parties, loading }) {
                   key={tx.id}
                   tx={tx}
                   partyName={partyMap[tx.partyId] || "Unknown Party"}
+                  uid={uid}
                 />
               ))}
             </tbody>

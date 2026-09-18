@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../../firebase/config";
+import { useAuth } from "../../context/AuthContext";
 import { validateName, validateMobile } from "../../utils/validators";
 import { UserPlus, Phone, Tag } from "lucide-react";
 import toast from "react-hot-toast";
@@ -8,6 +9,7 @@ import toast from "react-hot-toast";
 const INITIAL = { name: "", mobile: "", type: "Customer" };
 
 export default function PartyForm() {
+  const { currentUser } = useAuth();
   const [form, setForm] = useState(INITIAL);
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
@@ -27,7 +29,7 @@ export default function PartyForm() {
     if (!validate()) return;
     setLoading(true);
     try {
-      await addDoc(collection(db, "parties"), {
+      await addDoc(collection(db, "users", currentUser.uid, "parties"), {
         name: form.name.trim(),
         mobile: form.mobile.replace(/\D/g, ""),
         type: form.type,

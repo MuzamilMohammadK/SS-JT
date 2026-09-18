@@ -5,11 +5,10 @@ import {
   signOut,
   onAuthStateChanged,
 } from "firebase/auth";
-import { auth } from "../firebase/config";
+import { auth } from "../services/firebase";
 
 const AuthContext = createContext(null);
 
-// ── Provider (component) ─────────────────────────────────────
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -30,20 +29,15 @@ export function AuthProvider({ children }) {
 
   const logout = () => signOut(auth);
 
-  const value = { currentUser, register, login, logout, loading };
-
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider value={{ currentUser, register, login, logout, loading }}>
       {!loading && children}
     </AuthContext.Provider>
   );
 }
 
-// ── Hook (non-component) ─────────────────────────────────────
-// Kept in the same file intentionally; Fast Refresh is fine with
-// multiple non-component exports alongside a single component export.
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used inside AuthProvider");
+  if (!ctx) throw new Error("useAuth must be used inside <AuthProvider>");
   return ctx;
 }
