@@ -44,11 +44,13 @@ function DetailDrawer({ tx }) {
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Saree Items</p>
           <div className="space-y-1.5">
             {(tx.sareeDetails || []).map((item, i) => (
-              <div key={i} className="flex items-center justify-between text-sm">
-                <span className="text-slate-300">{item.sareeName} ×{item.quantity}</span>
-                <div className="flex gap-3 text-right">
+              <div key={i} className="flex items-center justify-between text-sm gap-2">
+                <span className="text-slate-300 truncate min-w-0 flex-1" title={`${item.sareeName} ×${item.quantity}`}>
+                  {item.sareeName} <span className="text-slate-500 text-xs">×{item.quantity}</span>
+                </span>
+                <div className="flex items-center gap-2 text-right flex-shrink-0">
                   <span className="text-slate-500 text-xs">@ {fmtINR(item.pricePerUnit)}</span>
-                  <span className="text-slate-200 num">{fmtINR(item.subtotal)}</span>
+                  <span className="text-slate-200 num font-medium">{fmtINR(item.subtotal)}</span>
                 </div>
               </div>
             ))}
@@ -105,14 +107,14 @@ function DetailDrawer({ tx }) {
             </p>
             <div className="space-y-1.5">
               {logs.map((log, i) => (
-                <div key={i} className="flex justify-between items-center text-sm py-1 border-b border-slate-800/40 last:border-0">
-                  <div className="flex items-center gap-2">
+                <div key={i} className="flex justify-between items-center text-sm py-1 border-b border-slate-800/40 last:border-0 gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
                     <span className="w-4 h-4 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-[9px] font-bold flex-shrink-0">
                       {i + 1}
                     </span>
-                    <span className="text-slate-500 text-xs">{logDate(log.date)}</span>
+                    <span className="text-slate-500 text-xs truncate">{logDate(log.date)}</span>
                   </div>
-                  <span className="text-emerald-400 font-semibold num">{fmtINR(log.amount)}</span>
+                  <span className="text-emerald-400 font-semibold num flex-shrink-0">{fmtINR(log.amount)}</span>
                 </div>
               ))}
             </div>
@@ -122,7 +124,7 @@ function DetailDrawer({ tx }) {
         {tx.notes && (
           <div className="border-t border-slate-800 pt-3">
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Notes</p>
-            <p className="text-slate-400 text-sm">{tx.notes}</p>
+            <p className="text-slate-400 text-sm break-words">{tx.notes}</p>
           </div>
         )}
       </div>
@@ -151,8 +153,8 @@ export default function TransactionHistoryTable({ transactions, loading, error }
   return (
     <div className="space-y-4">
       {/* ── Filter Bar ── */}
-      <div className="card p-4 flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
+      <div className="card p-3 sm:p-4 flex flex-col md:flex-row gap-2 sm:gap-3">
+        <div className="relative flex-1 min-w-0">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
           <input type="text" value={searchParty} onChange={(e) => setSearchParty(e.target.value)}
             placeholder="Search by party name…"
@@ -165,22 +167,24 @@ export default function TransactionHistoryTable({ transactions, loading, error }
           )}
         </div>
 
-        <div className="flex gap-1 p-1 rounded-xl bg-slate-900/60 border border-slate-800/60">
-          {["All", "Given", "Taken"].map((t) => (
-            <button key={t} type="button" onClick={() => setFilterType(t)}
-              className={`tab-item py-1.5 px-3 text-xs${filterType === t ? " active" : ""}`}>
-              {t}
-            </button>
-          ))}
-        </div>
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+          <div className="flex gap-1 p-1 rounded-xl bg-slate-900/60 border border-slate-800/60 min-w-0">
+            {["All", "Given", "Taken"].map((t) => (
+              <button key={t} type="button" onClick={() => setFilterType(t)}
+                className={`tab-item py-1.5 px-2 text-xs truncate${filterType === t ? " active" : ""}`}>
+                {t}
+              </button>
+            ))}
+          </div>
 
-        <div className="flex gap-1 p-1 rounded-xl bg-slate-900/60 border border-slate-800/60">
-          {["All", "Pending", "Settled"].map((s) => (
-            <button key={s} type="button" onClick={() => setFilterStatus(s)}
-              className={`tab-item py-1.5 px-3 text-xs${filterStatus === s ? " active" : ""}`}>
-              {s}
-            </button>
-          ))}
+          <div className="flex gap-1 p-1 rounded-xl bg-slate-900/60 border border-slate-800/60 min-w-0">
+            {["All", "Pending", "Settled"].map((s) => (
+              <button key={s} type="button" onClick={() => setFilterStatus(s)}
+                className={`tab-item py-1.5 px-2 text-xs truncate${filterStatus === s ? " active" : ""}`}>
+                {s}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -284,37 +288,37 @@ export default function TransactionHistoryTable({ transactions, loading, error }
           <div className="md:hidden space-y-3">
             {filtered.map((tx) => (
               <div key={tx.id} className="card overflow-hidden">
-                <div className="p-4">
+                <div className="p-3.5 sm:p-4">
                   <div className="flex items-start justify-between gap-2 mb-3">
-                    <div>
-                      <p className="text-slate-200 font-semibold text-sm">{tx.partyName}</p>
-                      <p className="text-slate-600 text-xs mt-0.5">{formatDate(tx.transactionDate)}</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-slate-200 font-semibold text-sm truncate" title={tx.partyName}>{tx.partyName}</p>
+                      <p className="text-slate-500 text-xs mt-0.5 truncate">{formatDate(tx.transactionDate)}</p>
                       {(tx.paymentLogs?.length > 0) && (
-                        <p className="text-[10px] text-slate-600 mt-0.5">
+                        <p className="text-[10px] text-slate-500 mt-0.5 truncate">
                           {tx.paymentLogs.length} payment{tx.paymentLogs.length > 1 ? "s" : ""}
                         </p>
                       )}
                     </div>
-                    <div className="flex flex-col items-end gap-1">
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
                       <TypeBadge type={tx.type} />
                       <StatusBadge status={tx.status} />
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2 text-center mb-3">
-                    <div className="bg-slate-800/60 rounded-xl p-2 min-w-0">
+                  <div className="grid grid-cols-3 gap-1.5 sm:gap-2 text-center mb-3">
+                    <div className="bg-slate-800/60 rounded-xl p-1.5 sm:p-2 min-w-0">
                       <p className="text-slate-500 text-[10px] uppercase tracking-wider truncate">Total</p>
                       <p className="text-white font-bold text-xs sm:text-sm num truncate" title={fmtINR(tx.totalAmount)}>
                         {fmtINR(tx.totalAmount)}
                       </p>
                     </div>
-                    <div className="bg-slate-800/60 rounded-xl p-2 min-w-0">
+                    <div className="bg-slate-800/60 rounded-xl p-1.5 sm:p-2 min-w-0">
                       <p className="text-slate-500 text-[10px] uppercase tracking-wider truncate">Paid</p>
                       <p className="text-emerald-400 font-bold text-xs sm:text-sm num truncate" title={fmtINR(tx.amountPaid)}>
                         {fmtINR(tx.amountPaid)}
                       </p>
                     </div>
-                    <div className="bg-slate-800/60 rounded-xl p-2 min-w-0">
+                    <div className="bg-slate-800/60 rounded-xl p-1.5 sm:p-2 min-w-0">
                       <p className="text-slate-500 text-[10px] uppercase tracking-wider truncate">Due</p>
                       <p className={`font-bold text-xs sm:text-sm num truncate ${tx.pendingDue > 0 ? "text-amber-400" : "text-slate-500"}`} title={fmtINR(tx.pendingDue)}>
                         {fmtINR(tx.pendingDue)}

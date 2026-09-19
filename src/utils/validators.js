@@ -62,13 +62,17 @@ export function computeGST(subtotal, gstRate) {
   return { gstAmount, totalAmount };
 }
 
-/** INR currency formatter */
-export const fmtINR = (n) =>
-  new Intl.NumberFormat("en-IN", {
+/** INR currency formatter — omits trailing .00 for whole numbers to prevent mobile overflow */
+export const fmtINR = (n) => {
+  const num = Number(n) || 0;
+  const hasDecimals = num % 1 !== 0;
+  return new Intl.NumberFormat("en-IN", {
     style:                 "currency",
     currency:              "INR",
+    minimumFractionDigits: hasDecimals ? 2 : 0,
     maximumFractionDigits: 2,
-  }).format(n || 0);
+  }).format(num);
+};
 
 /** Map Firebase Auth error codes → user-friendly messages */
 export function firebaseAuthError(code) {

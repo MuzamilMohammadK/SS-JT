@@ -14,12 +14,12 @@ export default function HistoryPage() {
         {/* Page header */}
         <div className="mb-6">
           <div className="flex items-center gap-3 mb-1">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-600 to-orange-700 flex items-center justify-center shadow-lg shadow-amber-500/30">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-600 to-orange-700 flex items-center justify-center shadow-lg shadow-amber-500/30 flex-shrink-0">
               <BookOpen className="w-5 h-5 text-white" />
             </div>
-            <div>
-              <h1 className="page-title">Transaction History</h1>
-              <p className="text-slate-500 text-sm">View, filter & settle all transactions</p>
+            <div className="min-w-0">
+              <h1 className="page-title truncate">Transaction History</h1>
+              <p className="text-slate-500 text-sm truncate">View, filter & settle all transactions</p>
             </div>
           </div>
         </div>

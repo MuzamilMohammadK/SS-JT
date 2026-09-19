@@ -9,9 +9,9 @@ import BottomNav from "./BottomNav";
  */
 export default function AppShell({ children }) {
   return (
-    <div className="min-h-dvh bg-slate-950 flex flex-col">
+    <div className="min-h-dvh bg-slate-950 flex flex-col overflow-x-hidden">
       <Navbar />
-      <main className="flex-1">
+      <main className="flex-1 min-w-0 overflow-x-hidden">
         {children}
       </main>
       <BottomNav />

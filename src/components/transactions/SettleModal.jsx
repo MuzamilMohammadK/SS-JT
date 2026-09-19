@@ -94,17 +94,17 @@ export default function SettleModal({ transaction: tx, onClose }) {
       <div className="relative z-10 card w-full max-w-md animate-fade-in-scale max-h-[90vh] overflow-y-auto">
 
         {/* ── Header ── */}
-        <div className="flex items-center justify-between p-5 border-b border-slate-800/60 sticky top-0 bg-slate-900/95 backdrop-blur-sm z-10">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-emerald-500/15 flex items-center justify-center">
+        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-800/60 sticky top-0 bg-slate-900/95 backdrop-blur-sm z-10 gap-3">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className="w-9 h-9 rounded-xl bg-emerald-500/15 flex items-center justify-center flex-shrink-0">
               <CreditCard className="w-5 h-5 text-emerald-400" />
             </div>
-            <div>
-              <h2 className="text-slate-100 font-semibold text-[15px]">Record Payment</h2>
-              <p className="text-slate-500 text-xs">{tx.partyName}</p>
+            <div className="min-w-0">
+              <h2 className="text-slate-100 font-semibold text-[15px] truncate">Record Payment</h2>
+              <p className="text-slate-500 text-xs truncate" title={tx.partyName}>{tx.partyName}</p>
             </div>
           </div>
-          <button onClick={onClose} className="btn-icon"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} className="btn-icon flex-shrink-0"><X className="w-4 h-4" /></button>
         </div>
 
         <div className="p-5 space-y-4">
