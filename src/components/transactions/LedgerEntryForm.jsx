@@ -190,7 +190,7 @@ export default function LedgerEntryForm({ parties }) {
     const paidNum = Number(form.amountPaid);
     if (form.amountPaid !== "" && (isNaN(paidNum) || paidNum < 0))
       e.amountPaid = "Amount paid cannot be negative.";
-    if (!isNaN(paidNum) && paidNum > totalAmount)
+    if (!isNaN(paidNum) && paidNum > totalAmount + 0.005)
       e.amountPaid = "Amount paid cannot exceed the total amount.";
 
     setErrors(e);
@@ -396,25 +396,33 @@ export default function LedgerEntryForm({ parties }) {
           {/* Amount Paid Initially */}
           <div className="field">
             <label htmlFor="le-paid" className="label flex items-center justify-between">
-              <span>Amount Paid Initially (₹)</span>
+              <span>{form.type === "Taken" ? "Amount Paid Upfront (₹)" : "Amount Paid Initially (₹)"}</span>
               {totalAmount > 0 && (
                 <button
                   type="button"
-                  onClick={() => setForm((f) => ({ ...f, amountPaid: String(totalAmount) }))}
+                  onClick={() => {
+                    setForm((f) => ({ ...f, amountPaid: String(totalAmount) }));
+                    setErrors((er) => ({ ...er, amountPaid: null }));
+                  }}
                   className="text-[10px] text-emerald-400 hover:text-emerald-300 font-semibold normal-case tracking-normal transition-colors"
                 >
-                  Mark Fully Paid
+                  {form.type === "Taken" ? "Mark Fully Settled" : "Mark Fully Paid"}
                 </button>
               )}
             </label>
             <div className="relative">
               <input
                 id="le-paid"
-                type="number"
-                min="0"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 value={form.amountPaid}
-                onChange={setTop("amountPaid")}
+                onChange={(e) => {
+                  const val = e.target.value.trim();
+                  if (val === "" || /^\d*\.?\d*$/.test(val)) {
+                    setForm((f) => ({ ...f, amountPaid: val }));
+                    setErrors((er) => ({ ...er, amountPaid: null }));
+                  }
+                }}
                 placeholder="0.00"
                 className={`input-base ${errors.amountPaid ? "input-error" : ""}`}
               />
