@@ -52,9 +52,9 @@ export default function ReceivablePayableBar({ transactions }) {
       </div>
 
       <div className="space-y-2">
-        <div className="flex justify-between text-xs">
-          <span className="text-slate-500">Received / Paid</span>
-          <span className="text-emerald-400 num">{fmtINR(paid)}</span>
+        <div className="flex justify-between items-center gap-2 text-xs">
+          <span className="text-slate-500 flex-shrink-0">Received / Paid</span>
+          <span className="text-emerald-400 num truncate">{fmtINR(paid)}</span>
         </div>
         <div className="progress-track">
           <div
@@ -62,9 +62,9 @@ export default function ReceivablePayableBar({ transactions }) {
             style={{ width: total > 0 ? `${Math.round((paid / total) * 100)}%` : "0%" }}
           />
         </div>
-        <div className="flex justify-between text-xs">
-          <span className="text-slate-500">Pending Due</span>
-          <span className={`num font-semibold ${pending > 0 ? "text-amber-400" : "text-emerald-400"}`}>
+        <div className="flex justify-between items-center gap-2 text-xs">
+          <span className="text-slate-500 flex-shrink-0">Pending Due</span>
+          <span className={`num font-semibold truncate ${pending > 0 ? "text-amber-400" : "text-emerald-400"}`}>
             {fmtINR(pending)}
           </span>
         </div>
@@ -115,9 +115,9 @@ export default function ReceivablePayableBar({ transactions }) {
           }
         </div>
 
-        <p className={`text-3xl font-bold num ${
+        <p className={`text-2xl sm:text-3xl font-bold num truncate ${
           stats.netBalance >= 0 ? "text-emerald-400" : "text-rose-400"
-        }`}>
+        }`} title={`${stats.netBalance >= 0 ? "+" : ""}${fmtINR(stats.netBalance)}`}>
           {stats.netBalance >= 0 ? "+" : ""}{fmtINR(stats.netBalance)}
         </p>
         <p className="text-slate-600 text-xs mt-1">

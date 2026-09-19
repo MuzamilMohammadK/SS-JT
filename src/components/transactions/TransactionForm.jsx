@@ -259,9 +259,9 @@ export default function TransactionForm({ parties }) {
           {/* Total (auto) */}
           <div className="field">
             <label className="label">Total Amount (Auto)</label>
-            <div className="input-base flex items-center gap-2 bg-slate-800/30 cursor-not-allowed opacity-80">
+            <div className="input-base flex items-center gap-2 bg-slate-800/30 cursor-not-allowed opacity-80 min-w-0">
               <IndianRupee className="w-4 h-4 text-slate-500 flex-shrink-0" />
-              <span className="text-slate-100 font-bold num">{fmt(totalAmount)}</span>
+              <span className="text-slate-100 font-bold num truncate">{fmt(totalAmount)}</span>
             </div>
           </div>
 
@@ -276,14 +276,14 @@ export default function TransactionForm({ parties }) {
           {/* Pending Due (auto) */}
           <div className="field">
             <label className="label">Pending Due (Auto)</label>
-            <div className={`input-base flex items-center gap-2 cursor-not-allowed ${
+            <div className={`input-base flex items-center gap-2 cursor-not-allowed min-w-0 ${
               isSettled ? "bg-emerald-500/10 border-emerald-500/30" : "bg-amber-500/10 border-amber-500/30"
             }`}>
               <IndianRupee className="w-4 h-4 text-slate-500 flex-shrink-0" />
-              <span className={`font-bold num ${isSettled ? "text-emerald-300" : "text-amber-300"}`}>
+              <span className={`font-bold num truncate ${isSettled ? "text-emerald-300" : "text-amber-300"}`}>
                 {fmt(pendingDue)}
               </span>
-              {isSettled && <span className="ml-auto text-emerald-400 text-xs font-semibold">✓ Settled</span>}
+              {isSettled && <span className="ml-auto text-emerald-400 text-xs font-semibold flex-shrink-0">✓ Settled</span>}
             </div>
           </div>
         </div>

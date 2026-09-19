@@ -94,27 +94,27 @@ function GSTSummary({ subTotal, gstRate, amountPaid }) {
         <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Financial Breakdown</span>
       </div>
       <div className="space-y-1.5 text-sm">
-        <div className="flex justify-between">
-          <span className="text-slate-500">Subtotal</span>
-          <span className="text-slate-300 num">{fmtINR(subTotal)}</span>
+        <div className="flex justify-between items-center gap-2">
+          <span className="text-slate-500 flex-shrink-0">Subtotal</span>
+          <span className="text-slate-300 num truncate">{fmtINR(subTotal)}</span>
         </div>
         {gstRate > 0 && (
-          <div className="flex justify-between">
-            <span className="text-slate-500">GST ({gstRate}%)</span>
-            <span className="text-slate-300 num">{fmtINR(gstAmount)}</span>
+          <div className="flex justify-between items-center gap-2">
+            <span className="text-slate-500 flex-shrink-0">GST ({gstRate}%)</span>
+            <span className="text-slate-300 num truncate">{fmtINR(gstAmount)}</span>
           </div>
         )}
-        <div className="flex justify-between border-t border-slate-800 pt-1.5">
-          <span className="text-slate-300 font-semibold">Total Amount</span>
-          <span className="text-white font-bold num">{fmtINR(totalAmount)}</span>
+        <div className="flex justify-between items-center gap-2 border-t border-slate-800 pt-1.5">
+          <span className="text-slate-300 font-semibold flex-shrink-0">Total Amount</span>
+          <span className="text-white font-bold num truncate">{fmtINR(totalAmount)}</span>
         </div>
-        <div className="flex justify-between">
-          <span className="text-slate-500">Amount Paid</span>
-          <span className="text-emerald-400 num">{fmtINR(Number(amountPaid) || 0)}</span>
+        <div className="flex justify-between items-center gap-2">
+          <span className="text-slate-500 flex-shrink-0">Amount Paid</span>
+          <span className="text-emerald-400 num truncate">{fmtINR(Number(amountPaid) || 0)}</span>
         </div>
-        <div className="flex justify-between border-t border-slate-800 pt-1.5">
-          <span className="text-amber-400 font-semibold">Pending Due</span>
-          <span className={`font-bold num ${pendingDue > 0 ? "text-amber-400" : "text-emerald-400"}`}>
+        <div className="flex justify-between items-center gap-2 border-t border-slate-800 pt-1.5">
+          <span className="text-amber-400 font-semibold flex-shrink-0">Pending Due</span>
+          <span className={`font-bold num truncate ${pendingDue > 0 ? "text-amber-400" : "text-emerald-400"}`}>
             {fmtINR(pendingDue)}
           </span>
         </div>
@@ -412,21 +412,34 @@ export default function LedgerEntryForm({ parties }) {
                 className={`input-base ${errors.amountPaid ? "input-error" : ""}`}
               />
             </div>
-            {/* Context: X paid of Y total */}
+            {/* Context: Amount breakdown mini-card that never overflows on mobile */}
             {totalAmount > 0 && (
-              <p className="text-[11px] text-slate-500 mt-1">
-                <span className="text-emerald-400 font-semibold num">{fmtINR(Number(form.amountPaid) || 0)}</span>
-                {" paid of "}
-                <span className="text-white font-semibold num">{fmtINR(totalAmount)}</span>
-                {" total — "}
-                <span className={`font-semibold num ${
-                  Math.max(0, totalAmount - (Number(form.amountPaid) || 0)) > 0
-                    ? "text-amber-400"
-                    : "text-emerald-400"
-                }`}>
-                  {fmtINR(Math.max(0, totalAmount - (Number(form.amountPaid) || 0)))} pending
-                </span>
-              </p>
+              <div className="mt-2 p-2 rounded-xl bg-slate-900/70 border border-slate-800/80">
+                <div className="grid grid-cols-3 gap-1 text-center">
+                  <div className="min-w-0 px-1">
+                    <p className="text-[10px] uppercase font-semibold text-slate-500 truncate">Total Bill</p>
+                    <p className="text-xs sm:text-sm font-semibold text-white num truncate" title={fmtINR(totalAmount)}>
+                      {fmtINR(totalAmount)}
+                    </p>
+                  </div>
+                  <div className="min-w-0 border-x border-slate-800/80 px-1">
+                    <p className="text-[10px] uppercase font-semibold text-emerald-500/90 truncate">Paid</p>
+                    <p className="text-xs sm:text-sm font-semibold text-emerald-400 num truncate" title={fmtINR(Number(form.amountPaid) || 0)}>
+                      {fmtINR(Number(form.amountPaid) || 0)}
+                    </p>
+                  </div>
+                  <div className="min-w-0 px-1">
+                    <p className="text-[10px] uppercase font-semibold text-amber-500/90 truncate">Pending</p>
+                    <p className={`text-xs sm:text-sm font-semibold num truncate ${
+                      Math.max(0, totalAmount - (Number(form.amountPaid) || 0)) > 0
+                        ? "text-amber-400"
+                        : "text-emerald-400"
+                    }`} title={fmtINR(Math.max(0, totalAmount - (Number(form.amountPaid) || 0)))}>
+                      {fmtINR(Math.max(0, totalAmount - (Number(form.amountPaid) || 0)))}
+                    </p>
+                  </div>
+                </div>
+              </div>
             )}
             {errors.amountPaid && <p className="text-rose-400 text-xs">{errors.amountPaid}</p>}
           </div>

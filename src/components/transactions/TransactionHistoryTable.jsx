@@ -57,27 +57,27 @@ function DetailDrawer({ tx }) {
 
         {/* Financial breakdown */}
         <div className="border-t border-slate-800 pt-3 space-y-1.5 text-sm">
-          <div className="flex justify-between">
-            <span className="text-slate-500">Subtotal</span>
-            <span className="text-slate-300 num">{fmtINR(tx.subTotalAmount)}</span>
+          <div className="flex justify-between items-center gap-2">
+            <span className="text-slate-500 flex-shrink-0">Subtotal</span>
+            <span className="text-slate-300 num truncate">{fmtINR(tx.subTotalAmount)}</span>
           </div>
           {tx.gstRate > 0 && (
-            <div className="flex justify-between">
-              <span className="text-slate-500">GST ({tx.gstRate}%)</span>
-              <span className="text-slate-300 num">{fmtINR(tx.gstAmount)}</span>
+            <div className="flex justify-between items-center gap-2">
+              <span className="text-slate-500 flex-shrink-0">GST ({tx.gstRate}%)</span>
+              <span className="text-slate-300 num truncate">{fmtINR(tx.gstAmount)}</span>
             </div>
           )}
-          <div className="flex justify-between font-semibold">
-            <span className="text-white">Total Amount</span>
-            <span className="text-white num">{fmtINR(tx.totalAmount)}</span>
+          <div className="flex justify-between items-center gap-2 font-semibold">
+            <span className="text-white flex-shrink-0">Total Amount</span>
+            <span className="text-white num truncate">{fmtINR(tx.totalAmount)}</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-slate-500">Amount Paid</span>
-            <span className="text-emerald-400 num">{fmtINR(tx.amountPaid)}</span>
+          <div className="flex justify-between items-center gap-2">
+            <span className="text-slate-500 flex-shrink-0">Amount Paid</span>
+            <span className="text-emerald-400 num truncate">{fmtINR(tx.amountPaid)}</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-amber-400 font-semibold">Pending Due</span>
-            <span className={`num font-semibold ${tx.pendingDue > 0 ? "text-amber-400" : "text-emerald-400"}`}>
+          <div className="flex justify-between items-center gap-2">
+            <span className="text-amber-400 font-semibold flex-shrink-0">Pending Due</span>
+            <span className={`num font-semibold truncate ${tx.pendingDue > 0 ? "text-amber-400" : "text-emerald-400"}`}>
               {fmtINR(tx.pendingDue)}
             </span>
           </div>
@@ -302,17 +302,21 @@ export default function TransactionHistoryTable({ transactions, loading, error }
                   </div>
 
                   <div className="grid grid-cols-3 gap-2 text-center mb-3">
-                    <div className="bg-slate-800/60 rounded-xl p-2">
-                      <p className="text-slate-500 text-[10px] uppercase tracking-wider">Total</p>
-                      <p className="text-white font-bold text-sm num">{fmtINR(tx.totalAmount)}</p>
+                    <div className="bg-slate-800/60 rounded-xl p-2 min-w-0">
+                      <p className="text-slate-500 text-[10px] uppercase tracking-wider truncate">Total</p>
+                      <p className="text-white font-bold text-xs sm:text-sm num truncate" title={fmtINR(tx.totalAmount)}>
+                        {fmtINR(tx.totalAmount)}
+                      </p>
                     </div>
-                    <div className="bg-slate-800/60 rounded-xl p-2">
-                      <p className="text-slate-500 text-[10px] uppercase tracking-wider">Paid</p>
-                      <p className="text-emerald-400 font-bold text-sm num">{fmtINR(tx.amountPaid)}</p>
+                    <div className="bg-slate-800/60 rounded-xl p-2 min-w-0">
+                      <p className="text-slate-500 text-[10px] uppercase tracking-wider truncate">Paid</p>
+                      <p className="text-emerald-400 font-bold text-xs sm:text-sm num truncate" title={fmtINR(tx.amountPaid)}>
+                        {fmtINR(tx.amountPaid)}
+                      </p>
                     </div>
-                    <div className="bg-slate-800/60 rounded-xl p-2">
-                      <p className="text-slate-500 text-[10px] uppercase tracking-wider">Due</p>
-                      <p className={`font-bold text-sm num ${tx.pendingDue > 0 ? "text-amber-400" : "text-slate-500"}`}>
+                    <div className="bg-slate-800/60 rounded-xl p-2 min-w-0">
+                      <p className="text-slate-500 text-[10px] uppercase tracking-wider truncate">Due</p>
+                      <p className={`font-bold text-xs sm:text-sm num truncate ${tx.pendingDue > 0 ? "text-amber-400" : "text-slate-500"}`} title={fmtINR(tx.pendingDue)}>
                         {fmtINR(tx.pendingDue)}
                       </p>
                     </div>

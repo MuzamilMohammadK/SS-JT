@@ -111,17 +111,17 @@ export default function SettleModal({ transaction: tx, onClose }) {
 
           {/* ── Summary ── */}
           <div className="card bg-slate-950/60 p-4 space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-slate-500">Invoice Total</span>
-              <span className="text-slate-300 num">{fmtINR(tx.totalAmount)}</span>
+            <div className="flex justify-between items-center gap-2">
+              <span className="text-slate-500 flex-shrink-0">Invoice Total</span>
+              <span className="text-slate-300 num truncate">{fmtINR(tx.totalAmount)}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500">Total Paid So Far</span>
-              <span className="text-emerald-400 num">{fmtINR(tx.amountPaid)}</span>
+            <div className="flex justify-between items-center gap-2">
+              <span className="text-slate-500 flex-shrink-0">Total Paid So Far</span>
+              <span className="text-emerald-400 num truncate">{fmtINR(tx.amountPaid)}</span>
             </div>
-            <div className="flex justify-between border-t border-slate-800 pt-2 font-semibold">
-              <span className="text-amber-400">Remaining Due</span>
-              <span className="text-amber-400 num text-base">{fmtINR(maxAllowed)}</span>
+            <div className="flex justify-between items-center gap-2 border-t border-slate-800 pt-2 font-semibold">
+              <span className="text-amber-400 flex-shrink-0">Remaining Due</span>
+              <span className="text-amber-400 num text-base truncate">{fmtINR(maxAllowed)}</span>
             </div>
 
             {/* Payment progress bar */}
