@@ -10,9 +10,9 @@ export default defineConfig({
       // Auto-update service worker silently in the background
       registerType: "autoUpdate",
 
-      // Include these files in the service worker precache
+      // Include only the small resized icons in precache (NOT the large source PNG)
       includeAssets: [
-        "favicon.svg",
+        "favicon-32.png",
         "icon-192.png",
         "icon-512.png",
         "icon-maskable.png",
@@ -55,10 +55,17 @@ export default defineConfig({
         ],
         shortcuts: [
           {
-            name: "Dashboard",
-            short_name: "Dashboard",
-            description: "Open the ledger dashboard",
-            url: "/",
+            name: "Parties",
+            short_name: "Parties",
+            description: "Manage customers & suppliers",
+            url: "/parties",
+            icons: [{ src: "/icon-192.png", sizes: "192x192" }],
+          },
+          {
+            name: "Ledger Entry",
+            short_name: "Ledger",
+            description: "Record a new transaction",
+            url: "/ledger",
             icons: [{ src: "/icon-192.png", sizes: "192x192" }],
           },
         ],
@@ -66,11 +73,25 @@ export default defineConfig({
 
       // Workbox service worker options
       workbox: {
-        // Cache all JS, CSS, HTML, images, fonts
-        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff,woff2}"],
+        // Only cache JS, CSS, HTML, small icons — explicitly exclude the large source PNG
+        globPatterns: ["**/*.{js,css,html,ico,svg,woff,woff2}"],
+        globIgnores: ["**/Gemini_Generated_Image_8yctlx8yctlx8yct.png"],
+
+        // Set a higher limit for cached files (PWA icons can be up to 3MB)
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
 
         // Runtime caching strategies
         runtimeCaching: [
+          // Serve icon images at runtime (not precached)
+          {
+            urlPattern: /\/icon-.*\.png$/,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "icons-cache",
+              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
           // Cache Google Fonts stylesheet
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
@@ -79,7 +100,7 @@ export default defineConfig({
               cacheName: "google-fonts-cache",
               expiration: {
                 maxEntries: 10,
-                maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
+                maxAgeSeconds: 60 * 60 * 24 * 365,
               },
               cacheableResponse: { statuses: [0, 200] },
             },
@@ -109,7 +130,7 @@ export default defineConfig({
         ],
       },
 
-      // Dev options — shows SW in development for easier testing
+      // Dev options
       devOptions: {
         enabled: true,
         type: "module",

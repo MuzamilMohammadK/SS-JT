@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
-import { LogOut, Gem, Menu, X, Download, Users, Receipt, BookOpen, BarChart3 } from "lucide-react";
+import { LogOut, Menu, X, Download, Users, Receipt, BookOpen, BarChart3 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { usePWAInstall } from "../../hooks/usePWAInstall";
 import InstallModal from "./InstallModal";
@@ -40,8 +40,8 @@ export default function Navbar() {
 
           {/* ── Brand ── */}
           <div className="flex items-center gap-2.5">
-            <div className="flex items-center justify-center w-8 h-8 md:w-9 md:h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 shadow-lg shadow-indigo-500/30">
-              <Gem className="w-4 h-4 text-white" />
+            <div className="flex items-center justify-center w-9 h-9 md:w-11 md:h-11 rounded-xl overflow-hidden shadow-lg shadow-indigo-500/20 border border-white/10">
+              <img src="/Gemini_Generated_Image_8yctlx8yctlx8yct.png" alt="Shivaayaha Logo" className="w-full h-full object-cover" />
             </div>
             <div className="leading-tight">
               <p className="text-white font-bold text-sm md:text-[15px] tracking-wide">

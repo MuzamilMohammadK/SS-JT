@@ -2,8 +2,8 @@ import { useState } from "react";
 import { fmtINR } from "../../utils/validators";
 import SettleModal from "./SettleModal";
 import {
-  Filter, Search, X, BookOpen, ArrowUpRight, ArrowDownLeft,
-  CheckCircle2, Clock, ChevronDown, ChevronUp, Eye, CreditCard,
+  Search, X, BookOpen, ArrowUpRight, ArrowDownLeft,
+  CheckCircle2, Clock, ChevronUp, Eye, CreditCard,
   Loader2, AlertCircle,
 } from "lucide-react";
 
@@ -26,20 +26,26 @@ function formatDate(dateStr) {
   return `${d}/${m}/${y}`;
 }
 
+function logDate(isoStr) {
+  if (!isoStr) return "—";
+  const d = new Date(isoStr);
+  return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
+}
+
 // ── Row Detail Drawer ──────────────────────────────────────────
 function DetailDrawer({ tx }) {
+  const logs = tx.paymentLogs || [];
   return (
     <div className="px-4 pb-4 animate-slide-up">
       <div className="card bg-slate-950/60 p-4 mt-2 space-y-3">
-        {/* Saree items table */}
+
+        {/* Saree items */}
         <div>
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Saree Items</p>
           <div className="space-y-1.5">
             {(tx.sareeDetails || []).map((item, i) => (
               <div key={i} className="flex items-center justify-between text-sm">
-                <span className="text-slate-300">
-                  {item.sareeName} ×{item.quantity}
-                </span>
+                <span className="text-slate-300">{item.sareeName} ×{item.quantity}</span>
                 <div className="flex gap-3 text-right">
                   <span className="text-slate-500 text-xs">@ {fmtINR(item.pricePerUnit)}</span>
                   <span className="text-slate-200 num">{fmtINR(item.subtotal)}</span>
@@ -75,7 +81,43 @@ function DetailDrawer({ tx }) {
               {fmtINR(tx.pendingDue)}
             </span>
           </div>
+          {/* Payment progress bar */}
+          {tx.totalAmount > 0 && (
+            <div className="pt-1">
+              <div className="progress-track h-1.5">
+                <div
+                  className="progress-fill bg-emerald-500"
+                  style={{ width: `${Math.min(100, Math.round((tx.amountPaid / tx.totalAmount) * 100))}%` }}
+                />
+              </div>
+              <p className="text-[10px] text-slate-600 mt-1 text-right">
+                {Math.round((tx.amountPaid / tx.totalAmount) * 100)}% settled
+              </p>
+            </div>
+          )}
         </div>
+
+        {/* Payment history log */}
+        {logs.length > 0 && (
+          <div className="border-t border-slate-800 pt-3">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+              Payment History ({logs.length} payment{logs.length > 1 ? "s" : ""})
+            </p>
+            <div className="space-y-1.5">
+              {logs.map((log, i) => (
+                <div key={i} className="flex justify-between items-center text-sm py-1 border-b border-slate-800/40 last:border-0">
+                  <div className="flex items-center gap-2">
+                    <span className="w-4 h-4 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-[9px] font-bold flex-shrink-0">
+                      {i + 1}
+                    </span>
+                    <span className="text-slate-500 text-xs">{logDate(log.date)}</span>
+                  </div>
+                  <span className="text-emerald-400 font-semibold num">{fmtINR(log.amount)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {tx.notes && (
           <div className="border-t border-slate-800 pt-3">
@@ -96,9 +138,8 @@ export default function TransactionHistoryTable({ transactions, loading, error }
   const [expanded,    setExpanded]    = useState(null);
   const [settling,    setSettling]    = useState(null);
 
-  // ── Filter logic ──
   const filtered = transactions.filter((tx) => {
-    const q   = searchParty.trim().toLowerCase();
+    const q          = searchParty.trim().toLowerCase();
     const matchParty  = !q || tx.partyName?.toLowerCase().includes(q);
     const matchType   = filterType === "All"   || tx.type === filterType;
     const matchStatus = filterStatus === "All" || tx.status === filterStatus;
@@ -111,7 +152,6 @@ export default function TransactionHistoryTable({ transactions, loading, error }
     <div className="space-y-4">
       {/* ── Filter Bar ── */}
       <div className="card p-4 flex flex-col sm:flex-row gap-3">
-        {/* Search */}
         <div className="relative flex-1">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
           <input type="text" value={searchParty} onChange={(e) => setSearchParty(e.target.value)}
@@ -125,22 +165,18 @@ export default function TransactionHistoryTable({ transactions, loading, error }
           )}
         </div>
 
-        {/* Type filter */}
         <div className="flex gap-1 p-1 rounded-xl bg-slate-900/60 border border-slate-800/60">
           {["All", "Given", "Taken"].map((t) => (
-            <button key={t} type="button"
-              onClick={() => setFilterType(t)}
+            <button key={t} type="button" onClick={() => setFilterType(t)}
               className={`tab-item py-1.5 px-3 text-xs${filterType === t ? " active" : ""}`}>
               {t}
             </button>
           ))}
         </div>
 
-        {/* Status filter */}
         <div className="flex gap-1 p-1 rounded-xl bg-slate-900/60 border border-slate-800/60">
           {["All", "Pending", "Settled"].map((s) => (
-            <button key={s} type="button"
-              onClick={() => setFilterStatus(s)}
+            <button key={s} type="button" onClick={() => setFilterStatus(s)}
               className={`tab-item py-1.5 px-3 text-xs${filterStatus === s ? " active" : ""}`}>
               {s}
             </button>
@@ -150,10 +186,7 @@ export default function TransactionHistoryTable({ transactions, loading, error }
 
       {/* ── Settlement Modal ── */}
       {settling && (
-        <SettleModal
-          transaction={settling}
-          onClose={() => setSettling(null)}
-        />
+        <SettleModal transaction={settling} onClose={() => setSettling(null)} />
       )}
 
       {/* ── States ── */}
@@ -206,6 +239,9 @@ export default function TransactionHistoryTable({ transactions, loading, error }
                         <td className="table-td text-slate-400 text-sm">{formatDate(tx.transactionDate)}</td>
                         <td className="table-td">
                           <p className="text-slate-200 font-medium text-sm">{tx.partyName}</p>
+                          {(tx.paymentLogs?.length > 0) && (
+                            <p className="text-[10px] text-slate-600">{tx.paymentLogs.length} payment{tx.paymentLogs.length > 1 ? "s" : ""} recorded</p>
+                          )}
                         </td>
                         <td className="table-td"><TypeBadge type={tx.type} /></td>
                         <td className="table-td text-right text-slate-200 font-semibold num text-sm">{fmtINR(tx.totalAmount)}</td>
@@ -253,12 +289,18 @@ export default function TransactionHistoryTable({ transactions, loading, error }
                     <div>
                       <p className="text-slate-200 font-semibold text-sm">{tx.partyName}</p>
                       <p className="text-slate-600 text-xs mt-0.5">{formatDate(tx.transactionDate)}</p>
+                      {(tx.paymentLogs?.length > 0) && (
+                        <p className="text-[10px] text-slate-600 mt-0.5">
+                          {tx.paymentLogs.length} payment{tx.paymentLogs.length > 1 ? "s" : ""}
+                        </p>
+                      )}
                     </div>
                     <div className="flex flex-col items-end gap-1">
                       <TypeBadge type={tx.type} />
                       <StatusBadge status={tx.status} />
                     </div>
                   </div>
+
                   <div className="grid grid-cols-3 gap-2 text-center mb-3">
                     <div className="bg-slate-800/60 rounded-xl p-2">
                       <p className="text-slate-500 text-[10px] uppercase tracking-wider">Total</p>
@@ -275,6 +317,19 @@ export default function TransactionHistoryTable({ transactions, loading, error }
                       </p>
                     </div>
                   </div>
+
+                  {/* Inline progress bar on mobile */}
+                  {tx.totalAmount > 0 && (
+                    <div className="mb-3">
+                      <div className="progress-track h-1">
+                        <div
+                          className="progress-fill bg-emerald-500"
+                          style={{ width: `${Math.min(100, Math.round((tx.amountPaid / tx.totalAmount) * 100))}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex gap-2">
                     <button onClick={() => toggleExpand(tx.id)}
                       className="btn-secondary flex-1 text-xs py-2 gap-1.5">
