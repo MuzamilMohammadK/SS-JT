@@ -3,7 +3,7 @@ import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../../services/firebase";
 import { useAuth } from "../../context/AuthContext";
 import {
-  validatePositive, validateNonNegative, computeGST, fmtINR, GST_RATES,
+  validatePositive, validateNonNegative, computeGST, fmtINR,
 } from "../../utils/validators";
 import {
   Plus, Trash2, Receipt, IndianRupee, ShoppingBag,
@@ -19,7 +19,7 @@ function getInitialForm() {
     partyId:         "",
     type:            "Given",
     sareeDetails:    [{ ...EMPTY_ROW }],
-    gstRate:         5,
+    gstRate:         "",
     amountPaid:      "",
     transactionDate: new Date().toISOString().slice(0, 10),
     notes:           "",
@@ -141,7 +141,8 @@ export default function LedgerEntryForm({ parties }) {
     [form.sareeDetails]
   );
 
-  const { gstAmount, totalAmount } = computeGST(subTotal, form.gstRate);
+  const gstRateNum = form.gstRate === "" ? 0 : Number(form.gstRate);
+  const { gstAmount, totalAmount } = computeGST(subTotal, gstRateNum);
 
   // ── Field Helpers ──
   const setTop = (k) => (e) => {
@@ -170,14 +171,21 @@ export default function LedgerEntryForm({ parties }) {
 
     const rowErrors = form.sareeDetails.map((r) => {
       const re = {};
-      if (!r.sareeName.trim())          re.sareeName    = "Name required.";
-      if (validatePositive(r.quantity))  re.quantity     = "Must be > 0.";
-      if (validatePositive(r.pricePerUnit)) re.pricePerUnit = "Must be > 0.";
+      if (!r.sareeName.trim())              re.sareeName    = "Name required.";
+      if (validatePositive(r.quantity))      re.quantity     = "Must be > 0.";
+      if (validatePositive(r.pricePerUnit))  re.pricePerUnit = "Must be > 0.";
       return Object.keys(re).length ? re : null;
     });
 
     if (rowErrors.some(Boolean)) e.rows = rowErrors;
     if (subTotal <= 0) e.subTotal = "Add at least one saree item with valid qty & price.";
+
+    // GST rate
+    if (form.gstRate !== "" && form.gstRate !== 0) {
+      const g = Number(form.gstRate);
+      if (isNaN(g) || g < 0)   e.gstRate = "GST rate cannot be negative.";
+      else if (g > 100)         e.gstRate = "GST rate cannot exceed 100%.";
+    }
 
     const paidNum = Number(form.amountPaid);
     if (form.amountPaid !== "" && (isNaN(paidNum) || paidNum < 0))
@@ -215,7 +223,7 @@ export default function LedgerEntryForm({ parties }) {
         type:            form.type,
         sareeDetails,
         subTotalAmount:  parseFloat(subTotal.toFixed(2)),
-        gstRate:         form.gstRate,
+        gstRate:         gstRateNum,
         gstAmount,
         totalAmount,
         amountPaid,
@@ -335,25 +343,91 @@ export default function LedgerEntryForm({ parties }) {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-          {/* GST Rate */}
+          {/* GST Rate — manual entry */}
           <div className="field">
-            <label htmlFor="le-gst" className="label">GST Rate</label>
-            <select id="le-gst" value={form.gstRate}
-              onChange={(e) => setForm((f) => ({ ...f, gstRate: Number(e.target.value) }))}
-              className="select-base">
-              {GST_RATES.map((r) => (
-                <option key={r.value} value={r.value}>{r.label}</option>
+            <label htmlFor="le-gst" className="label flex items-center gap-1">
+              GST Rate
+              <span className="text-slate-600 font-normal normal-case tracking-normal text-[10px] ml-1">enter any %</span>
+            </label>
+            <div className="relative">
+              <input
+                id="le-gst"
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={form.gstRate}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setForm((f) => ({ ...f, gstRate: v === "" ? "" : Number(v) }));
+                }}
+                placeholder="e.g. 5, 12, 18"
+                className={`input-base pr-10 ${errors.gstRate ? "input-error" : ""}`}
+              />
+              <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-semibold pointer-events-none">%</span>
+            </div>
+            {/* Quick presets */}
+            <div className="flex gap-1.5 mt-1.5">
+              {[0, 5, 12, 18].map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, gstRate: r }))}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all duration-150 border ${
+                    Number(form.gstRate) === r
+                      ? "bg-indigo-600/30 text-indigo-300 border-indigo-500/40"
+                      : "bg-slate-800/60 text-slate-500 border-slate-700/50 hover:text-slate-300 hover:border-slate-600"
+                  }`}
+                >
+                  {r === 0 ? "None" : `${r}%`}
+                </button>
               ))}
-            </select>
+            </div>
+            {errors.gstRate && <p className="text-rose-400 text-xs">{errors.gstRate}</p>}
           </div>
 
-          {/* Amount Paid */}
+          {/* Amount Paid Initially */}
           <div className="field">
-            <label htmlFor="le-paid" className="label">Amount Paid Now (₹)</label>
-            <input id="le-paid" type="number" min="0" step="0.01"
-              value={form.amountPaid} onChange={setTop("amountPaid")}
-              placeholder="0.00 (leave blank for full credit)"
-              className={`input-base ${errors.amountPaid ? "input-error" : ""}`} />
+            <label htmlFor="le-paid" className="label flex items-center justify-between">
+              <span>Amount Paid Initially (₹)</span>
+              {totalAmount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, amountPaid: String(totalAmount) }))}
+                  className="text-[10px] text-emerald-400 hover:text-emerald-300 font-semibold normal-case tracking-normal transition-colors"
+                >
+                  Mark Fully Paid
+                </button>
+              )}
+            </label>
+            <div className="relative">
+              <input
+                id="le-paid"
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.amountPaid}
+                onChange={setTop("amountPaid")}
+                placeholder="0.00"
+                className={`input-base ${errors.amountPaid ? "input-error" : ""}`}
+              />
+            </div>
+            {/* Context: X paid of Y total */}
+            {totalAmount > 0 && (
+              <p className="text-[11px] text-slate-500 mt-1">
+                <span className="text-emerald-400 font-semibold num">{fmtINR(Number(form.amountPaid) || 0)}</span>
+                {" paid of "}
+                <span className="text-white font-semibold num">{fmtINR(totalAmount)}</span>
+                {" total — "}
+                <span className={`font-semibold num ${
+                  Math.max(0, totalAmount - (Number(form.amountPaid) || 0)) > 0
+                    ? "text-amber-400"
+                    : "text-emerald-400"
+                }`}>
+                  {fmtINR(Math.max(0, totalAmount - (Number(form.amountPaid) || 0)))} pending
+                </span>
+              </p>
+            )}
             {errors.amountPaid && <p className="text-rose-400 text-xs">{errors.amountPaid}</p>}
           </div>
         </div>
@@ -362,7 +436,7 @@ export default function LedgerEntryForm({ parties }) {
         {subTotal > 0 && (
           <GSTSummary
             subTotal={subTotal}
-            gstRate={form.gstRate}
+            gstRate={gstRateNum}
             amountPaid={form.amountPaid}
           />
         )}
