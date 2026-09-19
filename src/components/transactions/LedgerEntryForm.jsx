@@ -141,7 +141,7 @@ export default function LedgerEntryForm({ parties }) {
     [form.sareeDetails]
   );
 
-  const gstRateNum = form.gstRate === "" ? 0 : Number(form.gstRate);
+  const gstRateNum = form.gstRate === "" || isNaN(Number(form.gstRate)) ? 0 : Number(form.gstRate);
   const { gstAmount, totalAmount } = computeGST(subTotal, gstRateNum);
 
   // ── Field Helpers ──
@@ -181,7 +181,7 @@ export default function LedgerEntryForm({ parties }) {
     if (subTotal <= 0) e.subTotal = "Add at least one saree item with valid qty & price.";
 
     // GST rate
-    if (form.gstRate !== "" && form.gstRate !== 0) {
+    if (form.gstRate !== "" && form.gstRate !== "0" && form.gstRate !== 0) {
       const g = Number(form.gstRate);
       if (isNaN(g) || g < 0)   e.gstRate = "GST rate cannot be negative.";
       else if (g > 100)         e.gstRate = "GST rate cannot exceed 100%.";
@@ -352,16 +352,20 @@ export default function LedgerEntryForm({ parties }) {
             <div className="relative">
               <input
                 id="le-gst"
-                type="number"
-                min="0"
-                max="100"
-                step="0.01"
-                value={form.gstRate}
+                type="text"
+                inputMode="decimal"
+                value={form.gstRate ?? ""}
                 onChange={(e) => {
-                  const v = e.target.value;
-                  setForm((f) => ({ ...f, gstRate: v === "" ? "" : Number(v) }));
+                  const val = e.target.value.trim();
+                  // Allow empty, or valid numbers and decimals (e.g. 5, 5., 5.5, 0.25)
+                  if (val === "" || /^\d*\.?\d*$/.test(val)) {
+                    if (val === "" || val === "." || Number(val) <= 100) {
+                      setForm((f) => ({ ...f, gstRate: val }));
+                      setErrors((er) => ({ ...er, gstRate: null }));
+                    }
+                  }
                 }}
-                placeholder="e.g. 5, 12, 18"
+                placeholder="0"
                 className={`input-base pr-10 ${errors.gstRate ? "input-error" : ""}`}
               />
               <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-semibold pointer-events-none">%</span>
@@ -372,9 +376,12 @@ export default function LedgerEntryForm({ parties }) {
                 <button
                   key={r}
                   type="button"
-                  onClick={() => setForm((f) => ({ ...f, gstRate: r }))}
+                  onClick={() => {
+                    setForm((f) => ({ ...f, gstRate: r === 0 ? "0" : String(r) }));
+                    setErrors((er) => ({ ...er, gstRate: null }));
+                  }}
                   className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all duration-150 border ${
-                    Number(form.gstRate) === r
+                    form.gstRate !== "" && Number(form.gstRate) === r
                       ? "bg-indigo-600/30 text-indigo-300 border-indigo-500/40"
                       : "bg-slate-800/60 text-slate-500 border-slate-700/50 hover:text-slate-300 hover:border-slate-600"
                   }`}
