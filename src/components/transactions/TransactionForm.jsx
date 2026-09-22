@@ -1,11 +1,13 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../../services/firebase";
 import { useAuth } from "../../context/AuthContext";
+import { useTransactions } from "../../hooks/useTransactions";
 import { validatePositive } from "../../utils/validators";
 import {
   Plus, Trash2, Receipt, IndianRupee, ShoppingBag,
   ChevronDown, ChevronUp, ArrowUpRight, ArrowDownLeft, RotateCcw, FileText,
+  AlertCircle, CheckCircle2,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -24,7 +26,13 @@ function getInitialForm() {
   };
 }
 
-// ── Currency formatter ────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────
+function formatDate(dateStr) {
+  if (!dateStr) return "—";
+  const [y, m, d] = dateStr.split("-");
+  return `${d}/${m}/${y}`;
+}
+
 const fmt = (n) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(n || 0);
 
@@ -80,11 +88,21 @@ function SareeRow({ index, row, onChange, onRemove, canRemove, errors }) {
 // ── TransactionForm (exported) ────────────────────────────────
 export default function TransactionForm({ parties }) {
   const { currentUser } = useAuth();
+  const { transactions = [] } = useTransactions(currentUser?.uid);
   const [form,      setForm]      = useState(getInitialForm);
   const [rowErrors, setRowErrors] = useState([]);
   const [formErrors,setFormErrors]= useState({});
   const [loading,   setLoading]   = useState(false);
   const [showItems, setShowItems] = useState(true);
+
+  // Check if invoice number already exists
+  const trimmedInvoice = form.invoiceNumber.trim().toLowerCase();
+  const existingInvoiceTx = useMemo(() => {
+    if (!trimmedInvoice) return null;
+    return transactions.find(
+      (tx) => tx.invoiceNumber && tx.invoiceNumber.trim().toLowerCase() === trimmedInvoice
+    );
+  }, [transactions, trimmedInvoice]);
 
   // ── Computed ─────────────────────────────────────────────
   const totalAmount = form.sareeDetails.reduce((sum, r) => {
@@ -119,6 +137,10 @@ export default function TransactionForm({ parties }) {
     if (!form.transactionDate) fErrs.transactionDate = "Date is required.";
     if (totalAmount <= 0)      fErrs.totalAmount     = "Total must be greater than ₹0.";
 
+    if (existingInvoiceTx) {
+      fErrs.invoiceNumber = `Invoice #${existingInvoiceTx.invoiceNumber} already exists for ${existingInvoiceTx.partyName}.`;
+    }
+
     const rErrs = form.sareeDetails.map((r) => {
       const e = {};
       if (!r.sareeName.trim())       e.sareeName   = "Required.";
@@ -135,6 +157,10 @@ export default function TransactionForm({ parties }) {
   // ── Submit ────────────────────────────────────────────────
   const handleSubmit = async (ev) => {
     ev.preventDefault();
+    if (existingInvoiceTx) {
+      toast.error(`Invoice #${existingInvoiceTx.invoiceNumber} already exists! Please use a unique invoice number.`);
+      return;
+    }
     if (!validate()) { toast.error("Please fix the validation errors."); return; }
     setLoading(true);
     try {
@@ -212,12 +238,50 @@ export default function TransactionForm({ parties }) {
 
           {/* Invoice Number */}
           <div className="field">
-            <label htmlFor="tx-invoice" className="label flex items-center gap-1">
-              <FileText className="w-3 h-3 text-indigo-400" /> Invoice Number
-            </label>
-            <input id="tx-invoice" type="text" value={form.invoiceNumber}
+            <div className="flex items-center justify-between">
+              <label htmlFor="tx-invoice" className="label flex items-center gap-1">
+                <FileText className="w-3 h-3 text-indigo-400" /> Invoice Number
+              </label>
+              {existingInvoiceTx ? (
+                <span className="text-[10px] text-rose-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" /> Already Exists
+                </span>
+              ) : form.invoiceNumber.trim() ? (
+                <span className="text-[10px] text-emerald-400 font-semibold flex items-center gap-0.5">
+                  <CheckCircle2 className="w-3 h-3" /> Available
+                </span>
+              ) : null}
+            </div>
+            <input
+              id="tx-invoice"
+              type="text"
+              value={form.invoiceNumber}
               onChange={(e) => setForm((f) => ({ ...f, invoiceNumber: e.target.value }))}
-              placeholder="e.g. INV-2026-001" className="input-base" />
+              placeholder="e.g. INV-2026-001"
+              className={`input-base ${
+                existingInvoiceTx || formErrors.invoiceNumber
+                  ? "border-rose-500 bg-rose-500/10 text-rose-100 placeholder-rose-300/40 focus:border-rose-500 focus:ring-rose-500/25"
+                  : form.invoiceNumber.trim()
+                  ? "border-emerald-500/40 focus:border-emerald-500"
+                  : ""
+              }`}
+            />
+            {existingInvoiceTx && (
+              <div className="flex items-start gap-2 p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs mt-1.5 animate-shake">
+                <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold text-rose-200">
+                    Invoice #{existingInvoiceTx.invoiceNumber} already exists!
+                  </p>
+                  <p className="text-[11px] text-rose-300/80 mt-0.5">
+                    Already used for <strong className="text-white">{existingInvoiceTx.partyName}</strong> on {formatDate(existingInvoiceTx.transactionDate)} ({fmt(existingInvoiceTx.totalAmount)}).
+                  </p>
+                </div>
+              </div>
+            )}
+            {!existingInvoiceTx && formErrors.invoiceNumber && (
+              <p className="text-rose-400 text-xs mt-1">{formErrors.invoiceNumber}</p>
+            )}
           </div>
 
           {/* Date */}

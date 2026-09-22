@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../../services/firebase";
 import { useAuth } from "../../context/AuthContext";
+import { useTransactions } from "../../hooks/useTransactions";
 import {
   validatePositive, validateNonNegative, computeGST, fmtINR,
 } from "../../utils/validators";
@@ -9,6 +10,7 @@ import {
   Plus, Trash2, Receipt, IndianRupee, ShoppingBag,
   ChevronDown, ChevronUp, Calculator, Users,
   ArrowUpRight, ArrowDownLeft, RotateCcw, FileText,
+  AlertCircle, CheckCircle2,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -125,13 +127,30 @@ function GSTSummary({ subTotal, gstRate, amountPaid }) {
   );
 }
 
+// ── Date Helper ────────────────────────────────────────────────
+function formatDate(dateStr) {
+  if (!dateStr) return "—";
+  const [y, m, d] = dateStr.split("-");
+  return `${d}/${m}/${y}`;
+}
+
 // ── Main Component ─────────────────────────────────────────────
 export default function LedgerEntryForm({ parties }) {
   const { currentUser } = useAuth();
   const uid = currentUser?.uid;
+  const { transactions = [] } = useTransactions(uid);
   const [form,    setForm]    = useState(getInitialForm());
   const [errors,  setErrors]  = useState({});
   const [loading, setLoading] = useState(false);
+
+  // Check if invoice number already exists
+  const trimmedInvoice = form.invoiceNumber.trim().toLowerCase();
+  const existingInvoiceTx = useMemo(() => {
+    if (!trimmedInvoice) return null;
+    return transactions.find(
+      (tx) => tx.invoiceNumber && tx.invoiceNumber.trim().toLowerCase() === trimmedInvoice
+    );
+  }, [transactions, trimmedInvoice]);
 
   // Compute subtotal from all rows
   const subTotal = useMemo(() =>
@@ -171,6 +190,10 @@ export default function LedgerEntryForm({ parties }) {
     const e = {};
     if (!form.partyId) e.partyId = "Please select a party.";
 
+    if (existingInvoiceTx) {
+      e.invoiceNumber = `Invoice #${existingInvoiceTx.invoiceNumber} already exists for ${existingInvoiceTx.partyName}.`;
+    }
+
     const rowErrors = form.sareeDetails.map((r) => {
       const re = {};
       if (!r.sareeName.trim())              re.sareeName    = "Name required.";
@@ -202,6 +225,10 @@ export default function LedgerEntryForm({ parties }) {
   // ── Submit ──
   const handleSubmit = async (ev) => {
     ev.preventDefault();
+    if (existingInvoiceTx) {
+      toast.error(`Invoice #${existingInvoiceTx.invoiceNumber} already exists! Please use a unique invoice number.`);
+      return;
+    }
     if (!validate()) return;
     setLoading(true);
 
@@ -295,12 +322,50 @@ export default function LedgerEntryForm({ parties }) {
 
           {/* Invoice Number */}
           <div className="field">
-            <label htmlFor="le-invoice" className="label flex items-center gap-1">
-              <FileText className="w-3 h-3 text-indigo-400" /> Invoice Number
-            </label>
-            <input id="le-invoice" type="text" value={form.invoiceNumber}
-              onChange={setTop("invoiceNumber")} placeholder="e.g. INV-2026-001"
-              className="input-base" />
+            <div className="flex items-center justify-between">
+              <label htmlFor="le-invoice" className="label flex items-center gap-1">
+                <FileText className="w-3 h-3 text-indigo-400" /> Invoice Number
+              </label>
+              {existingInvoiceTx ? (
+                <span className="text-[10px] text-rose-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" /> Already Exists
+                </span>
+              ) : form.invoiceNumber.trim() ? (
+                <span className="text-[10px] text-emerald-400 font-semibold flex items-center gap-0.5">
+                  <CheckCircle2 className="w-3 h-3" /> Available
+                </span>
+              ) : null}
+            </div>
+            <input
+              id="le-invoice"
+              type="text"
+              value={form.invoiceNumber}
+              onChange={setTop("invoiceNumber")}
+              placeholder="e.g. INV-2026-001"
+              className={`input-base ${
+                existingInvoiceTx || errors.invoiceNumber
+                  ? "border-rose-500 bg-rose-500/10 text-rose-100 placeholder-rose-300/40 focus:border-rose-500 focus:ring-rose-500/25"
+                  : form.invoiceNumber.trim()
+                  ? "border-emerald-500/40 focus:border-emerald-500"
+                  : ""
+              }`}
+            />
+            {existingInvoiceTx && (
+              <div className="flex items-start gap-2 p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs mt-1.5 animate-shake">
+                <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold text-rose-200">
+                    Invoice #{existingInvoiceTx.invoiceNumber} already exists!
+                  </p>
+                  <p className="text-[11px] text-rose-300/80 mt-0.5">
+                    Already used for <strong className="text-white">{existingInvoiceTx.partyName}</strong> on {formatDate(existingInvoiceTx.transactionDate)} ({fmtINR(existingInvoiceTx.totalAmount)}).
+                  </p>
+                </div>
+              </div>
+            )}
+            {!existingInvoiceTx && errors.invoiceNumber && (
+              <p className="text-rose-400 text-xs mt-1">{errors.invoiceNumber}</p>
+            )}
           </div>
 
           {/* Date */}
