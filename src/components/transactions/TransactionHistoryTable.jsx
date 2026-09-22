@@ -1,19 +1,20 @@
 import { useState } from "react";
-import { doc, updateDoc, collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { doc, updateDoc, collection, addDoc, serverTimestamp, arrayUnion } from "firebase/firestore";
 import { db } from "../../services/firebase";
 import { useAuth } from "../../context/AuthContext";
-import { fmtINR } from "../../utils/validators";
-import SettleModal from "./SettleModal";
+import { fmtINR, validateNonNegative } from "../../utils/validators";
 import {
   Search, X, BookOpen, ArrowUpRight, ArrowDownLeft,
   CheckCircle2, Clock, ChevronUp, Eye, CreditCard,
   Loader2, AlertCircle, CalendarDays, RotateCcw, FileText,
+  IndianRupee,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
 // ── Type helpers (backward-compat) ────────────────────────────
 const isSale     = (t) => t === "Sale"     || t === "Given"  || t === "Sale Return";
 const isPurchase = (t) => t === "Purchase" || t === "Taken"  || t === "Purchase Return";
+const canReturn  = (tx) => tx.type === "Sale" || tx.type === "Given" || tx.type === "Purchase" || tx.type === "Taken";
 
 // ── TypeBadge ─────────────────────────────────────────────────
 function TypeBadge({ type }) {
@@ -40,13 +41,6 @@ function formatDate(dateStr) {
   return `${d}/${m}/${y}`;
 }
 
-function logDate(isoStr) {
-  if (!isoStr) return "—";
-  const d = new Date(isoStr);
-  return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
-}
-
-// ── Detail Drawer ─────────────────────────────────────────────
 // ── Compute unified payment terms / installments ──────────────
 function getPaymentTerms(tx) {
   const rawLogs = tx.paymentLogs || [];
@@ -88,8 +82,487 @@ function getPaymentTerms(tx) {
   });
 }
 
-// ── Detail Drawer ─────────────────────────────────────────────
-function DetailDrawer({ tx }) {
+// ── Inline Calendar Subview (No pop-up) ────────────────────────
+function InlineCalendarView({ tx, uid, onDone }) {
+  const [date, setDate] = useState(tx.transactionDate ?? new Date().toISOString().slice(0, 10));
+  const [loading, setLoading] = useState(false);
+
+  const handleSave = async () => {
+    if (!date) { toast.error("Please pick a valid date."); return; }
+    if (!uid) { toast.error("Session expired."); return; }
+    setLoading(true);
+    try {
+      await updateDoc(doc(db, "users", uid, "transactions", tx.id), { transactionDate: date });
+      toast.success("Transaction date updated.");
+      onDone();
+    } catch (err) {
+      toast.error("Failed to update date.");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl bg-slate-900/90 border border-indigo-500/25 p-4 space-y-4 animate-fade-in">
+      <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-indigo-500/15 flex items-center justify-center flex-shrink-0">
+            <CalendarDays className="w-4 h-4 text-indigo-400" />
+          </div>
+          <div>
+            <h4 className="text-slate-100 font-bold text-sm">Change Transaction Date</h4>
+            <p className="text-slate-500 text-xs">Update record date inline for {tx.partyName}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-xl bg-slate-800/60 border border-slate-700/40 px-3 py-2.5 text-center">
+          <p className="text-slate-500 text-[10px] uppercase tracking-wider font-semibold mb-0.5">Current Date</p>
+          <p className="text-slate-300 font-bold text-sm num">{formatDate(tx.transactionDate)}</p>
+        </div>
+        <div className="rounded-xl bg-indigo-500/10 border border-indigo-500/25 px-3 py-2.5 text-center">
+          <p className="text-indigo-400 text-[10px] uppercase tracking-wider font-semibold mb-0.5">New Date</p>
+          <p className="text-indigo-200 font-bold text-sm num">{formatDate(date)}</p>
+        </div>
+      </div>
+
+      <div className="field">
+        <label htmlFor={`edit-date-${tx.id}`} className="label flex items-center gap-1.5 text-xs">
+          <CalendarDays className="w-3.5 h-3.5 text-indigo-400" /> Select New Date
+        </label>
+        <input
+          id={`edit-date-${tx.id}`}
+          type="date"
+          value={date}
+          max={new Date().toISOString().slice(0, 10)}
+          onChange={(e) => setDate(e.target.value)}
+          className="input-base cursor-pointer"
+          style={{ fontSize: "16px", padding: "12px 14px" }}
+        />
+      </div>
+
+      <div className="flex gap-2.5 pt-1">
+        <button
+          type="button"
+          onClick={onDone}
+          className="btn-secondary flex-1 text-xs"
+          style={{ minHeight: "44px" }}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={loading || !date || date === tx.transactionDate}
+          onClick={handleSave}
+          className="btn-primary flex-1 text-xs"
+          style={{ minHeight: "44px" }}
+        >
+          {loading ? <span className="spinner" /> : <CalendarDays className="w-4 h-4" />}
+          {loading ? "Saving…" : "Save Date"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Inline Return Subview (No pop-up) ──────────────────────────
+function InlineReturnView({ tx, uid, onDone }) {
+  const returnType = (tx.type === "Sale" || tx.type === "Given") ? "Sale Return" : "Purchase Return";
+  const [returnDate, setReturnDate] = useState(new Date().toISOString().slice(0, 10));
+  const [items, setItems] = useState((tx.sareeDetails || []).map((item) => ({ ...item, returnQty: "" })));
+  const [notes, setNotes] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const returnTotal = items.reduce((sum, item) =>
+    sum + (Number(item.returnQty) || 0) * (Number(item.pricePerUnit) || 0), 0);
+
+  const handleSave = async () => {
+    if (!items.some((item) => Number(item.returnQty) > 0)) {
+      toast.error("Enter return quantity for at least one item.");
+      return;
+    }
+    if (!uid) { toast.error("Session expired."); return; }
+    setLoading(true);
+    try {
+      const sareeDetails = items
+        .filter((item) => Number(item.returnQty) > 0)
+        .map((item) => ({
+          sareeName:    item.sareeName,
+          quantity:     Number(item.returnQty),
+          pricePerUnit: Number(item.pricePerUnit),
+          subtotal:     Number(item.returnQty) * Number(item.pricePerUnit),
+        }));
+
+      await addDoc(collection(db, "users", uid, "transactions"), {
+        partyId:         tx.partyId,
+        partyName:       tx.partyName,
+        type:            returnType,
+        sareeDetails,
+        subTotalAmount:  parseFloat(returnTotal.toFixed(2)),
+        gstRate:         0,
+        gstAmount:       0,
+        totalAmount:     parseFloat(returnTotal.toFixed(2)),
+        amountPaid:      parseFloat(returnTotal.toFixed(2)),
+        pendingDue:      0,
+        status:          "Settled",
+        transactionDate: returnDate,
+        notes:           notes.trim(),
+        returnOfTxId:    tx.id,
+        createdAt:       serverTimestamp(),
+        settledAt:       serverTimestamp(),
+      });
+
+      toast.success(`${returnType} of ${fmtINR(returnTotal)} recorded.`);
+      onDone();
+    } catch (err) {
+      toast.error("Failed to record return.");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl bg-slate-900/90 border border-amber-500/25 p-4 space-y-4 animate-fade-in">
+      <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-amber-500/15 flex items-center justify-center flex-shrink-0">
+            <RotateCcw className="w-4 h-4 text-amber-400" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h4 className="text-slate-100 font-bold text-sm">Record Return Sarees</h4>
+              <span className="text-xs font-semibold text-amber-400 bg-amber-500/15 px-2 py-0.5 rounded border border-amber-500/30">
+                {returnType}
+              </span>
+            </div>
+            <p className="text-slate-500 text-xs">Record returned stock directly inline for {tx.partyName}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="field">
+        <label className="label flex items-center gap-1.5 text-xs">
+          <CalendarDays className="w-3.5 h-3.5 text-amber-400" /> Return Date
+        </label>
+        <input
+          type="date"
+          value={returnDate}
+          max={new Date().toISOString().slice(0, 10)}
+          onChange={(e) => setReturnDate(e.target.value)}
+          className="input-base cursor-pointer"
+          style={{ fontSize: "16px", padding: "10px 14px" }}
+        />
+      </div>
+
+      <div>
+        <p className="label mb-2 text-xs">Select Sarees to Return</p>
+        <div className="space-y-2">
+          {items.map((item, i) => (
+            <div key={i} className="rounded-xl bg-slate-800/50 border border-slate-700/40 p-3">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-slate-200 text-xs font-semibold truncate flex-1">{item.sareeName}</p>
+                <span className="text-slate-400 text-xs flex-shrink-0 ml-2">@ {fmtINR(item.pricePerUnit)}/pc</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="flex-1">
+                  <label className="text-[10px] text-slate-500 uppercase tracking-wider">
+                    Return Qty (max {item.quantity})
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max={item.quantity}
+                    step="1"
+                    value={item.returnQty}
+                    onChange={(e) => {
+                      const updated = [...items];
+                      updated[i] = { ...updated[i], returnQty: e.target.value };
+                      setItems(updated);
+                    }}
+                    placeholder="0"
+                    className="input-base py-1.5 text-sm mt-0.5"
+                    style={{ fontSize: "16px" }}
+                  />
+                </div>
+                <div className="text-right flex-shrink-0 min-w-[72px]">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wider">Value</p>
+                  <p className="text-amber-400 font-bold num text-sm mt-1">
+                    {fmtINR((Number(item.returnQty) || 0) * item.pricePerUnit)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className={`rounded-xl px-3.5 py-2.5 flex justify-between items-center transition-all ${
+        returnTotal > 0 ? "bg-amber-500/10 border border-amber-500/25" : "bg-slate-800/40 border border-slate-700/40"
+      }`}>
+        <span className={`font-semibold text-xs ${returnTotal > 0 ? "text-amber-300" : "text-slate-500"}`}>
+          Total Return Value
+        </span>
+        <span className={`font-bold num text-sm ${returnTotal > 0 ? "text-amber-300" : "text-slate-600"}`}>
+          {fmtINR(returnTotal)}
+        </span>
+      </div>
+
+      <div className="field">
+        <label className="label text-xs">Notes (optional)</label>
+        <textarea
+          rows={2}
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Reason for return, condition of goods…"
+          className="input-base resize-none text-xs"
+        />
+      </div>
+
+      <div className="flex gap-2.5 pt-1">
+        <button
+          type="button"
+          onClick={onDone}
+          className="btn-secondary flex-1 text-xs"
+          style={{ minHeight: "44px" }}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={loading || returnTotal <= 0}
+          onClick={handleSave}
+          className="btn-primary flex-1 text-xs"
+          style={{ minHeight: "44px" }}
+        >
+          {loading ? <span className="spinner" /> : <RotateCcw className="w-4 h-4" />}
+          {loading ? "Saving…" : "Record Return"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Inline Settle Subview (No pop-up) ──────────────────────────
+function InlineSettleView({ tx, uid, onDone }) {
+  const isPurchase = tx.type === "Purchase" || tx.type === "Taken" || tx.type === "Purchase Return";
+  const [amount, setAmount] = useState("");
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const currentPaid = Number(tx.amountPaid) || 0;
+  const currentTotal = Number(tx.totalAmount) || 0;
+  const rawDue = tx.pendingDue !== undefined && tx.pendingDue !== null
+    ? Number(tx.pendingDue)
+    : Math.max(0, currentTotal - currentPaid);
+  const currentDue = isNaN(rawDue) ? Math.max(0, currentTotal - currentPaid) : rawDue;
+  const maxAllowed = parseFloat(Math.max(0, currentDue).toFixed(2));
+
+  const validate = () => {
+    const n = Number(amount);
+    if (!amount) return "Please enter an amount.";
+    const e = validateNonNegative(amount);
+    if (e) return e;
+    if (n <= 0) return "Settlement amount must be greater than zero.";
+    if (maxAllowed > 0 && n > maxAllowed + 0.005) {
+      return `Cannot exceed the pending balance of ${fmtINR(maxAllowed)}.`;
+    }
+    return null;
+  };
+
+  const handleSettle = async (e) => {
+    if (e) e.preventDefault();
+    const err = validate();
+    if (err) { setError(err); return; }
+    if (!uid) { toast.error("Session expired."); return; }
+
+    setLoading(true);
+    try {
+      const paid = parseFloat(Number(amount).toFixed(2));
+      const newPaid = parseFloat((currentPaid + paid).toFixed(2));
+      const newDue = parseFloat(Math.max(0, currentDue - paid).toFixed(2));
+      const isFullySettled = newDue <= 0.005;
+
+      const logEntry = {
+        amount: paid,
+        date: new Date().toISOString(),
+        type: isPurchase ? "Payment to Supplier" : "Receipt from Customer",
+      };
+
+      await updateDoc(doc(db, "users", uid, "transactions", tx.id), {
+        amountPaid: newPaid,
+        pendingDue: newDue,
+        status: isFullySettled ? "Settled" : "Pending",
+        settledAt: isFullySettled ? serverTimestamp() : null,
+        paymentLogs: arrayUnion(logEntry),
+      });
+
+      toast.success(
+        isFullySettled
+          ? `✅ Fully settled — ${fmtINR(currentTotal)} cleared.`
+          : `💰 ${fmtINR(paid)} recorded. ${fmtINR(newDue)} still pending.`
+      );
+      onDone();
+    } catch (err) {
+      toast.error("Failed to record settlement.");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const settleAll = () => {
+    setAmount(String(maxAllowed));
+    setError(null);
+  };
+
+  return (
+    <div className="rounded-2xl bg-slate-900/90 border border-emerald-500/25 p-4 space-y-4 animate-fade-in">
+      <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-3">
+        <div className="flex items-center gap-2.5">
+          <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
+            isPurchase ? "bg-rose-500/15 text-rose-400" : "bg-emerald-500/15 text-emerald-400"
+          }`}>
+            <CreditCard className="w-4 h-4" />
+          </div>
+          <div>
+            <h4 className="text-slate-100 font-bold text-sm">
+              {isPurchase ? "Record Payment to Supplier" : "Record Payment from Customer"}
+            </h4>
+            <p className="text-slate-500 text-xs">
+              {isPurchase ? `Paying to ${tx.partyName}` : `Receiving from ${tx.partyName}`}
+            </p>
+          </div>
+        </div>
+        <span className="text-xs font-bold text-amber-400 bg-amber-500/15 px-2.5 py-1 rounded-lg border border-amber-500/30 num">
+          Due: {fmtINR(maxAllowed)}
+        </span>
+      </div>
+
+      {/* Summary Row */}
+      <div className="grid grid-cols-3 gap-2 text-center">
+        <div className="rounded-xl bg-slate-800/60 p-2 border border-slate-700/40">
+          <p className="text-[10px] text-slate-500 uppercase font-semibold">Total</p>
+          <p className="text-white font-bold text-xs num">{fmtINR(currentTotal)}</p>
+        </div>
+        <div className="rounded-xl bg-slate-800/60 p-2 border border-slate-700/40">
+          <p className="text-[10px] text-slate-500 uppercase font-semibold">Paid</p>
+          <p className="text-emerald-400 font-bold text-xs num">{fmtINR(currentPaid)}</p>
+        </div>
+        <div className="rounded-xl bg-slate-800/60 p-2 border border-slate-700/40">
+          <p className="text-[10px] text-slate-500 uppercase font-semibold">Pending Due</p>
+          <p className="text-amber-400 font-bold text-xs num">{fmtINR(maxAllowed)}</p>
+        </div>
+      </div>
+
+      {/* Amount input */}
+      <div className="field">
+        <div className="flex items-center justify-between mb-1">
+          <label htmlFor={`settle-in-${tx.id}`} className="label flex items-center gap-1 text-xs">
+            <IndianRupee className="w-3.5 h-3.5 text-emerald-400" /> Payment Amount (₹)
+          </label>
+          {maxAllowed > 0 && (
+            <button
+              type="button"
+              onClick={settleAll}
+              className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold"
+            >
+              Pay Full ({fmtINR(maxAllowed)})
+            </button>
+          )}
+        </div>
+        <input
+          id={`settle-in-${tx.id}`}
+          type="text"
+          inputMode="decimal"
+          value={amount}
+          onChange={(e) => {
+            const val = e.target.value.trim();
+            if (val === "" || /^\d*\.?\d*$/.test(val)) {
+              setAmount(val);
+              setError(null);
+            }
+          }}
+          placeholder={`0.00 (Max: ${fmtINR(maxAllowed)})`}
+          className={`input-base text-base font-semibold num ${error ? "input-error" : ""}`}
+          style={{ fontSize: "16px", padding: "12px 14px" }}
+        />
+        {error && (
+          <p className="flex items-center gap-1 text-rose-400 text-xs mt-1">
+            <AlertCircle className="w-3 h-3 flex-shrink-0" />{error}
+          </p>
+        )}
+
+        {/* Quick Presets */}
+        {maxAllowed > 0 && (
+          <div className="flex gap-2 mt-2">
+            <button
+              type="button"
+              onClick={settleAll}
+              className="btn-secondary flex-1 text-xs py-1.5 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+            >
+              Full Due ({fmtINR(maxAllowed)})
+            </button>
+            {maxAllowed >= 100 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setAmount(String(parseFloat((maxAllowed / 2).toFixed(2))));
+                  setError(null);
+                }}
+                className="btn-secondary text-xs py-1.5 px-3"
+              >
+                50% ({fmtINR(parseFloat((maxAllowed / 2).toFixed(2)))})
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Remaining calculation preview */}
+        {amount && !error && Number(amount) > 0 && Number(amount) <= maxAllowed && (
+          <div className="mt-2 p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/40 text-xs space-y-1">
+            <div className="flex justify-between items-center text-slate-400">
+              <span>This Payment:</span>
+              <span className="text-emerald-400 font-semibold num">+ {fmtINR(Number(amount))}</span>
+            </div>
+            <div className="flex justify-between items-center border-t border-slate-700/40 pt-1 font-semibold">
+              <span className="text-slate-300">Remaining Balance:</span>
+              <span className={`num ${Math.max(0, maxAllowed - Number(amount)) > 0 ? "text-amber-400" : "text-emerald-400"}`}>
+                {fmtINR(Math.max(0, maxAllowed - Number(amount)))}
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="flex gap-2.5 pt-1">
+        <button
+          type="button"
+          onClick={onDone}
+          className="btn-secondary flex-1 text-xs"
+          style={{ minHeight: "44px" }}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={loading || !amount || Number(amount) <= 0}
+          onClick={handleSettle}
+          className="btn-primary flex-1 text-xs"
+          style={{ minHeight: "44px" }}
+        >
+          {loading ? <span className="spinner" /> : <CreditCard className="w-4 h-4" />}
+          {loading ? "Recording…" : "Record Payment"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Detail Drawer (Contains all 4 inline subviews) ─────────────
+function DetailDrawer({ tx, uid, activeTab = "details", onTabChange, onClose }) {
   const terms = getPaymentTerms(tx);
   const total = Number(tx.totalAmount) || 0;
   const paid  = Number(tx.amountPaid) || 0;
@@ -124,365 +597,202 @@ function DetailDrawer({ tx }) {
           </div>
         </div>
 
-        {/* ── Payment Details & Term-by-Term Installments ── */}
-        <div className="rounded-2xl bg-slate-900/90 border border-slate-800 p-3.5 sm:p-4 space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <CreditCard className="w-4 h-4 text-emerald-400" />
-              <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-                Payment Installment Terms ({terms.length} {terms.length === 1 ? "term" : "terms"})
-              </h4>
-            </div>
-            <span className={`text-xs font-bold num ${due <= 0 ? "text-emerald-400" : "text-amber-400"}`}>
-              {due <= 0 ? "✅ 100% Settled" : `${fmtINR(due)} Due`}
-            </span>
-          </div>
+        {/* ── Subview Switcher Tab Bar (All inside the same card) ── */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none border-b border-slate-800/80">
+          <button
+            type="button"
+            onClick={() => onTabChange("details")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all flex-shrink-0 ${
+              activeTab === "details"
+                ? "bg-indigo-600 text-white shadow-sm"
+                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
+            }`}
+          >
+            <Eye className="w-3.5 h-3.5" /> Details & Terms
+          </button>
 
-          {terms.length === 0 ? (
-            <div className="p-3 rounded-xl bg-slate-800/40 text-center">
-              <p className="text-slate-400 text-xs font-medium">No payments received yet.</p>
-              <p className="text-slate-600 text-[11px] mt-0.5">Total invoice amount {fmtINR(total)} is pending.</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {terms.map((term, i) => (
-                <div
-                  key={i}
-                  className="rounded-xl p-3 bg-slate-800/60 border border-slate-700/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:border-emerald-500/30 transition-all"
-                >
-                  <div className="flex items-start sm:items-center gap-2.5 min-w-0">
-                    <span className="w-6 h-6 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center justify-center flex-shrink-0">
-                      {term.termNumber}
-                    </span>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-slate-100 font-semibold text-xs">{term.title}</span>
-                        <span className="text-slate-500 text-[11px]">📅 {formatDate(term.date)}</span>
-                      </div>
-                      <p className="text-slate-400 text-[11px] truncate">{term.type}</p>
-                    </div>
-                  </div>
+          <button
+            type="button"
+            onClick={() => onTabChange("calendar")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all flex-shrink-0 ${
+              activeTab === "calendar"
+                ? "bg-indigo-600 text-white shadow-sm"
+                : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
+            }`}
+          >
+            <CalendarDays className="w-3.5 h-3.5" /> Change Date
+          </button>
 
-                  <div className="flex items-center justify-between sm:justify-end gap-3 border-t sm:border-0 border-slate-700/40 pt-1.5 sm:pt-0 sm:text-right">
-                    <div>
-                      <p className="text-emerald-400 font-bold text-sm num">+ {fmtINR(term.amount)}</p>
-                      <p className="text-slate-500 text-[10px] num">Remaining: {fmtINR(term.balanceAfter)}</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+          {canReturn(tx) && (
+            <button
+              type="button"
+              onClick={() => onTabChange("return")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all flex-shrink-0 ${
+                activeTab === "return"
+                  ? "bg-amber-600 text-white shadow-sm"
+                  : "text-amber-400/90 hover:text-amber-300 hover:bg-amber-500/10"
+              }`}
+            >
+              <RotateCcw className="w-3.5 h-3.5" /> Return Sarees
+            </button>
           )}
 
-          {/* Progress bar */}
-          <div className="pt-2 border-t border-slate-800/80 space-y-1.5 text-xs">
-            <div className="flex justify-between items-center text-slate-400">
-              <span>Total: <strong className="text-white num">{fmtINR(total)}</strong></span>
-              <span>Paid: <strong className="text-emerald-400 num">{fmtINR(paid)}</strong></span>
-              <span>Due: <strong className={due > 0 ? "text-amber-400 num" : "text-slate-500 num"}>{fmtINR(due)}</strong></span>
-            </div>
-            <div className="progress-track h-2">
-              <div className="progress-fill bg-emerald-500" style={{ width: `${pct}%` }} />
-            </div>
-            <p className="text-[10px] text-slate-500 text-right">
-              {pct}% completed ({terms.length} term{terms.length !== 1 ? "s" : ""} paid)
-            </p>
-          </div>
+          {(tx.status === "Pending" || due > 0) && (
+            <button
+              type="button"
+              onClick={() => onTabChange("settle")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all flex-shrink-0 ${
+                activeTab === "settle"
+                  ? "bg-emerald-600 text-white shadow-sm"
+                  : "text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
+              }`}
+            >
+              <CreditCard className="w-3.5 h-3.5" /> Settle Due ({fmtINR(due)})
+            </button>
+          )}
+
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="ml-auto p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition-colors flex-shrink-0"
+              title="Hide Details"
+            >
+              <ChevronUp className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
-        {/* Saree items */}
-        <div>
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Saree Items</p>
-          <div className="space-y-1.5">
-            {(tx.sareeDetails || []).map((item, i) => (
-              <div key={i} className="flex items-center justify-between text-sm gap-2 bg-slate-900/50 p-2.5 rounded-xl border border-slate-800/60">
-                <span className="text-slate-300 truncate min-w-0 flex-1 text-xs sm:text-sm">
-                  {item.sareeName} <span className="text-slate-500 text-xs">×{item.quantity}</span>
+        {/* ── Subview 1: Details & Terms ── */}
+        {activeTab === "details" && (
+          <div className="space-y-4 animate-fade-in">
+            {/* Payment Details & Term-by-Term Installments */}
+            <div className="rounded-2xl bg-slate-900/90 border border-slate-800 p-3.5 sm:p-4 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-emerald-400" />
+                  <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                    Payment Installment Terms ({terms.length} {terms.length === 1 ? "term" : "terms"})
+                  </h4>
+                </div>
+                <span className={`text-xs font-bold num ${due <= 0 ? "text-emerald-400" : "text-amber-400"}`}>
+                  {due <= 0 ? "✅ 100% Settled" : `${fmtINR(due)} Due`}
                 </span>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className="text-slate-500 text-xs">@ {fmtINR(item.pricePerUnit)}</span>
-                  <span className="text-slate-200 num font-medium text-xs sm:text-sm">{fmtINR(item.subtotal ?? item.lineTotal)}</span>
+              </div>
+
+              {terms.length === 0 ? (
+                <div className="p-3 rounded-xl bg-slate-800/40 text-center">
+                  <p className="text-slate-400 text-xs font-medium">No payments received yet.</p>
+                  <p className="text-slate-600 text-[11px] mt-0.5">Total invoice amount {fmtINR(total)} is pending.</p>
                 </div>
-              </div>
-            ))}
-          </div>
-        </div>
+              ) : (
+                <div className="space-y-2">
+                  {terms.map((term, i) => (
+                    <div
+                      key={i}
+                      className="rounded-xl p-3 bg-slate-800/60 border border-slate-700/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:border-emerald-500/30 transition-all"
+                    >
+                      <div className="flex items-start sm:items-center gap-2.5 min-w-0">
+                        <span className="w-6 h-6 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center justify-center flex-shrink-0">
+                          {term.termNumber}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-slate-100 font-semibold text-xs">{term.title}</span>
+                            <span className="text-slate-500 text-[11px]">📅 {formatDate(term.date)}</span>
+                          </div>
+                          <p className="text-slate-400 text-[11px] truncate">{term.type}</p>
+                        </div>
+                      </div>
 
-        {/* Financial Breakdown */}
-        <div className="border-t border-slate-800 pt-3 space-y-1.5 text-xs sm:text-sm">
-          <div className="flex justify-between items-center gap-2">
-            <span className="text-slate-500 flex-shrink-0">Subtotal</span>
-            <span className="text-slate-300 num truncate">{fmtINR(tx.subTotalAmount ?? tx.totalAmount)}</span>
-          </div>
-          {tx.gstRate > 0 && (
-            <div className="flex justify-between items-center gap-2">
-              <span className="text-slate-500 flex-shrink-0">GST ({tx.gstRate}%)</span>
-              <span className="text-slate-300 num truncate">{fmtINR(tx.gstAmount)}</span>
-            </div>
-          )}
-          <div className="flex justify-between items-center gap-2 font-semibold">
-            <span className="text-white flex-shrink-0">Total Amount</span>
-            <span className="text-white num truncate">{fmtINR(tx.totalAmount)}</span>
-          </div>
-        </div>
+                      <div className="flex items-center justify-between sm:justify-end gap-3 border-t sm:border-0 border-slate-700/40 pt-1.5 sm:pt-0 sm:text-right">
+                        <div>
+                          <p className="text-emerald-400 font-bold text-sm num">+ {fmtINR(term.amount)}</p>
+                          <p className="text-slate-500 text-[10px] num">Remaining: {fmtINR(term.balanceAfter)}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
-        {/* Notes */}
-        {tx.notes && (
-          <div className="border-t border-slate-800 pt-2.5">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Notes</p>
-            <p className="text-slate-400 text-xs break-words">📝 {tx.notes}</p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Edit Date Modal (bottom-sheet) ────────────────────────────
-function EditDateModal({ transaction: tx, uid, onClose }) {
-  const [date,    setDate]    = useState(tx.transactionDate ?? new Date().toISOString().slice(0, 10));
-  const [loading, setLoading] = useState(false);
-  const fmt = (s) => { if (!s) return "—"; const [y,m,d] = s.split("-"); return `${d}/${m}/${y}`; };
-
-  const handleSave = async () => {
-    if (!date) { toast.error("Please pick a valid date."); return; }
-    setLoading(true);
-    try {
-      await updateDoc(doc(db, "users", uid, "transactions", tx.id), { transactionDate: date });
-      toast.success("Transaction date updated.");
-      onClose();
-    } catch (err) {
-      toast.error("Failed to update date. Please try again.");
-      console.error(err);
-    } finally { setLoading(false); }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full md:max-w-sm animate-slide-in-up md:animate-fade-in-scale">
-        <div className="card rounded-t-3xl rounded-b-none md:rounded-2xl overflow-hidden"
-             style={{ paddingBottom: "env(safe-area-inset-bottom, 20px)" }}>
-          <div className="flex justify-center pt-3 pb-1 md:hidden">
-            <div className="w-10 h-1 rounded-full bg-slate-700" />
-          </div>
-          <div className="flex items-center justify-between px-5 pt-3 pb-4 md:pt-5 md:border-b md:border-slate-800/60">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 rounded-2xl bg-indigo-500/15 flex items-center justify-center flex-shrink-0">
-                <CalendarDays className="w-5 h-5 text-indigo-400" />
-              </div>
-              <div className="min-w-0">
-                <h2 className="text-slate-100 font-bold text-base leading-tight">Edit Transaction Date</h2>
-                <p className="text-slate-500 text-xs mt-0.5 truncate">{tx.partyName}</p>
-              </div>
-            </div>
-            <button onClick={onClose} className="btn-icon flex-shrink-0 hidden md:flex"><X className="w-4 h-4" /></button>
-          </div>
-          <div className="px-5 pt-3 pb-2 space-y-4">
-            <div className="grid grid-cols-2 gap-2">
-              <div className="rounded-xl bg-slate-800/60 border border-slate-700/40 px-3 py-3 text-center">
-                <p className="text-slate-500 text-[10px] uppercase tracking-wider font-semibold mb-1">Current</p>
-                <p className="text-slate-300 font-bold text-sm num">{fmt(tx.transactionDate)}</p>
-              </div>
-              <div className="rounded-xl bg-indigo-500/10 border border-indigo-500/25 px-3 py-3 text-center">
-                <p className="text-indigo-400 text-[10px] uppercase tracking-wider font-semibold mb-1">New</p>
-                <p className="text-indigo-200 font-bold text-sm num">{fmt(date)}</p>
-              </div>
-            </div>
-            <div className="field">
-              <label htmlFor="edit-tx-date" className="label flex items-center gap-1.5">
-                <CalendarDays className="w-3 h-3" /> Select New Date
-              </label>
-              <input id="edit-tx-date" type="date" value={date}
-                max={new Date().toISOString().slice(0, 10)}
-                onChange={(e) => setDate(e.target.value)}
-                className="input-base cursor-pointer"
-                style={{ fontSize: "16px", padding: "14px 16px" }} />
-            </div>
-            <div className="flex gap-3 pt-1 pb-1">
-              <button type="button" onClick={onClose} className="btn-secondary flex-1" style={{ minHeight: "52px" }}>Cancel</button>
-              <button type="button" disabled={loading || !date || date === tx.transactionDate}
-                onClick={handleSave} className="btn-primary flex-1" style={{ minHeight: "52px" }}>
-                {loading ? <span className="spinner" /> : <CalendarDays className="w-4 h-4" />}
-                {loading ? "Saving…" : "Save Date"}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Return Modal (bottom-sheet) ───────────────────────────────
-function ReturnModal({ transaction: tx, uid, onClose }) {
-  const returnType = (tx.type === "Sale" || tx.type === "Given") ? "Sale Return" : "Purchase Return";
-  const [returnDate, setReturnDate] = useState(new Date().toISOString().slice(0, 10));
-  const [items,   setItems]   = useState((tx.sareeDetails || []).map((item) => ({ ...item, returnQty: "" })));
-  const [notes,   setNotes]   = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const returnTotal = items.reduce((sum, item) =>
-    sum + (Number(item.returnQty) || 0) * (Number(item.pricePerUnit) || 0), 0);
-
-  const handleSave = async () => {
-    if (!items.some((item) => Number(item.returnQty) > 0)) {
-      toast.error("Enter return quantity for at least one item.");
-      return;
-    }
-    setLoading(true);
-    try {
-      const sareeDetails = items
-        .filter((item) => Number(item.returnQty) > 0)
-        .map((item) => ({
-          sareeName:    item.sareeName,
-          quantity:     Number(item.returnQty),
-          pricePerUnit: Number(item.pricePerUnit),
-          subtotal:     Number(item.returnQty) * Number(item.pricePerUnit),
-        }));
-
-      await addDoc(collection(db, "users", uid, "transactions"), {
-        partyId:         tx.partyId,
-        partyName:       tx.partyName,
-        type:            returnType,
-        sareeDetails,
-        subTotalAmount:  parseFloat(returnTotal.toFixed(2)),
-        gstRate:         0,
-        gstAmount:       0,
-        totalAmount:     parseFloat(returnTotal.toFixed(2)),
-        amountPaid:      parseFloat(returnTotal.toFixed(2)),
-        pendingDue:      0,
-        status:          "Settled",
-        transactionDate: returnDate,
-        notes:           notes.trim(),
-        returnOfTxId:    tx.id,
-        createdAt:       serverTimestamp(),
-        settledAt:       serverTimestamp(),
-      });
-
-      toast.success(`${returnType} of ${fmtINR(returnTotal)} recorded.`);
-      onClose();
-    } catch (err) {
-      toast.error("Failed to record return. Please try again.");
-      console.error(err);
-    } finally { setLoading(false); }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full md:max-w-lg animate-slide-in-up md:animate-fade-in-scale">
-        <div className="card rounded-t-3xl rounded-b-none md:rounded-2xl"
-             style={{ maxHeight: "90vh", overflowY: "auto", paddingBottom: "env(safe-area-inset-bottom, 20px)" }}>
-          {/* Drag handle */}
-          <div className="flex justify-center pt-3 pb-1 md:hidden">
-            <div className="w-10 h-1 rounded-full bg-slate-700" />
-          </div>
-
-          {/* Header */}
-          <div className="flex items-center justify-between px-5 pt-3 pb-4 md:pt-5 border-b border-slate-800/60">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 rounded-2xl bg-amber-500/15 flex items-center justify-center flex-shrink-0">
-                <RotateCcw className="w-5 h-5 text-amber-400" />
-              </div>
-              <div className="min-w-0">
-                <h2 className="text-slate-100 font-bold text-base">Record Return</h2>
-                <p className="text-slate-500 text-xs mt-0.5 truncate">
-                  {tx.partyName} · <span className="text-amber-400">{returnType}</span>
+              {/* Progress bar */}
+              <div className="pt-2 border-t border-slate-800/80 space-y-1.5 text-xs">
+                <div className="flex justify-between items-center text-slate-400">
+                  <span>Total: <strong className="text-white num">{fmtINR(total)}</strong></span>
+                  <span>Paid: <strong className="text-emerald-400 num">{fmtINR(paid)}</strong></span>
+                  <span>Due: <strong className={due > 0 ? "text-amber-400 num" : "text-slate-500 num"}>{fmtINR(due)}</strong></span>
+                </div>
+                <div className="progress-track h-2">
+                  <div className="progress-fill bg-emerald-500" style={{ width: `${pct}%` }} />
+                </div>
+                <p className="text-[10px] text-slate-500 text-right">
+                  {pct}% completed ({terms.length} term{terms.length !== 1 ? "s" : ""} paid)
                 </p>
               </div>
             </div>
-            <button onClick={onClose} className="btn-icon hidden md:flex"><X className="w-4 h-4" /></button>
-          </div>
 
-          <div className="px-5 pt-4 pb-2 space-y-4">
-            {/* Return date */}
-            <div className="field">
-              <label className="label flex items-center gap-1.5">
-                <CalendarDays className="w-3 h-3" /> Return Date
-              </label>
-              <input type="date" value={returnDate}
-                max={new Date().toISOString().slice(0, 10)}
-                onChange={(e) => setReturnDate(e.target.value)}
-                className="input-base cursor-pointer"
-                style={{ fontSize: "16px" }} />
-            </div>
-
-            {/* Items */}
+            {/* Saree items */}
             <div>
-              <p className="label mb-2">Returned Items</p>
-              <div className="space-y-2">
-                {items.map((item, i) => (
-                  <div key={i} className="rounded-xl bg-slate-800/50 border border-slate-700/40 p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-slate-200 text-sm font-semibold truncate flex-1">{item.sareeName}</p>
-                      <span className="text-slate-500 text-xs flex-shrink-0 ml-2">@ {fmtINR(item.pricePerUnit)}/pc</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1">
-                        <label className="text-[10px] text-slate-500 uppercase tracking-wider">
-                          Return Qty (max {item.quantity})
-                        </label>
-                        <input
-                          type="number" min="0" max={item.quantity} step="1"
-                          value={item.returnQty}
-                          onChange={(e) => {
-                            const updated = [...items];
-                            updated[i] = { ...updated[i], returnQty: e.target.value };
-                            setItems(updated);
-                          }}
-                          placeholder="0"
-                          className="input-base py-2 text-sm mt-0.5"
-                          style={{ fontSize: "16px" }}
-                        />
-                      </div>
-                      <div className="text-right flex-shrink-0 min-w-[72px]">
-                        <p className="text-[10px] text-slate-500 uppercase tracking-wider">Value</p>
-                        <p className="text-amber-400 font-bold num text-sm mt-1">
-                          {fmtINR((Number(item.returnQty) || 0) * item.pricePerUnit)}
-                        </p>
-                      </div>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Saree Items</p>
+              <div className="space-y-1.5">
+                {(tx.sareeDetails || []).map((item, i) => (
+                  <div key={i} className="flex items-center justify-between text-sm gap-2 bg-slate-900/50 p-2.5 rounded-xl border border-slate-800/60">
+                    <span className="text-slate-300 truncate min-w-0 flex-1 text-xs sm:text-sm">
+                      {item.sareeName} <span className="text-slate-500 text-xs">×{item.quantity}</span>
+                    </span>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-slate-500 text-xs">@ {fmtINR(item.pricePerUnit)}</span>
+                      <span className="text-slate-200 num font-medium text-xs sm:text-sm">{fmtINR(item.subtotal ?? item.lineTotal)}</span>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Return total pill */}
-            <div className={`rounded-xl px-4 py-3 flex justify-between items-center transition-all ${
-              returnTotal > 0
-                ? "bg-amber-500/10 border border-amber-500/25"
-                : "bg-slate-800/40 border border-slate-700/40"
-            }`}>
-              <span className={`font-semibold text-sm ${returnTotal > 0 ? "text-amber-300" : "text-slate-500"}`}>
-                Total Return Value
-              </span>
-              <span className={`font-bold num text-base ${returnTotal > 0 ? "text-amber-300" : "text-slate-600"}`}>
-                {fmtINR(returnTotal)}
-              </span>
+            {/* Financial Breakdown */}
+            <div className="border-t border-slate-800 pt-3 space-y-1.5 text-xs sm:text-sm">
+              <div className="flex justify-between items-center gap-2">
+                <span className="text-slate-500 flex-shrink-0">Subtotal</span>
+                <span className="text-slate-300 num truncate">{fmtINR(tx.subTotalAmount ?? tx.totalAmount)}</span>
+              </div>
+              {tx.gstRate > 0 && (
+                <div className="flex justify-between items-center gap-2">
+                  <span className="text-slate-500 flex-shrink-0">GST ({tx.gstRate}%)</span>
+                  <span className="text-slate-300 num truncate">{fmtINR(tx.gstAmount)}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center gap-2 font-semibold">
+                <span className="text-white flex-shrink-0">Total Amount</span>
+                <span className="text-white num truncate">{fmtINR(tx.totalAmount)}</span>
+              </div>
             </div>
 
             {/* Notes */}
-            <div className="field">
-              <label className="label">Notes (optional)</label>
-              <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)}
-                placeholder="Reason for return, condition of goods…"
-                className="input-base resize-none text-sm" />
-            </div>
-
-            {/* Buttons */}
-            <div className="flex gap-3 pt-1 pb-1">
-              <button type="button" onClick={onClose} className="btn-secondary flex-1" style={{ minHeight: "52px" }}>
-                Cancel
-              </button>
-              <button type="button" disabled={loading || returnTotal <= 0} onClick={handleSave}
-                className="btn-primary flex-1" style={{ minHeight: "52px" }}>
-                {loading ? <span className="spinner" /> : <RotateCcw className="w-4 h-4" />}
-                {loading ? "Saving…" : "Record Return"}
-              </button>
-            </div>
+            {tx.notes && (
+              <div className="border-t border-slate-800 pt-2.5">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Notes</p>
+                <p className="text-slate-400 text-xs break-words">📝 {tx.notes}</p>
+              </div>
+            )}
           </div>
-        </div>
+        )}
+
+        {/* ── Subview 2: Change Date Inline ── */}
+        {activeTab === "calendar" && (
+          <InlineCalendarView tx={tx} uid={uid} onDone={() => onTabChange("details")} />
+        )}
+
+        {/* ── Subview 3: Return Sarees Inline ── */}
+        {activeTab === "return" && (
+          <InlineReturnView tx={tx} uid={uid} onDone={() => onTabChange("details")} />
+        )}
+
+        {/* ── Subview 4: Settle Due Payment Inline ── */}
+        {activeTab === "settle" && (
+          <InlineSettleView tx={tx} uid={uid} onDone={() => onTabChange("details")} />
+        )}
+
       </div>
     </div>
   );
@@ -496,10 +806,10 @@ export default function TransactionHistoryTable({ transactions, loading, error }
   const [activeTab,    setActiveTab]    = useState(null); // null = All, "Sales", "Purchases"
   const [searchParty,  setSearchParty]  = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
-  const [expanded,     setExpanded]     = useState(null);
-  const [settling,     setSettling]     = useState(null);
-  const [editingDate,  setEditingDate]  = useState(null);
-  const [returning,    setReturning]    = useState(null);
+
+  // Inline expansion state: id = transaction ID, tab = "details" | "calendar" | "return" | "settle"
+  const [expandedId,   setExpandedId]   = useState(null);
+  const [expandedTab,  setExpandedTab]  = useState("details");
 
   // Live counts for tabs
   const salesCount     = transactions.filter((tx) => isSale(tx.type)).length;
@@ -528,8 +838,15 @@ export default function TransactionHistoryTable({ transactions, loading, error }
     return matchParty && matchStatus;
   });
 
-  const toggleExpand = (id) => setExpanded((v) => (v === id ? null : id));
-  const canReturn    = (tx) => tx.type === "Sale" || tx.type === "Given" || tx.type === "Purchase" || tx.type === "Taken";
+  // Action toggle helper: opens inline subview or closes if clicking same action
+  const handleAction = (txId, tab) => {
+    if (expandedId === txId && expandedTab === tab) {
+      setExpandedId(null);
+    } else {
+      setExpandedId(txId);
+      setExpandedTab(tab);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -596,11 +913,6 @@ export default function TransactionHistoryTable({ transactions, loading, error }
         </div>
       </div>
 
-      {/* ── Modals ── */}
-      {settling    && <SettleModal   transaction={settling}    onClose={() => setSettling(null)} />}
-      {editingDate && <EditDateModal transaction={editingDate} uid={uid} onClose={() => setEditingDate(null)} />}
-      {returning   && <ReturnModal   transaction={returning}   uid={uid} onClose={() => setReturning(null)} />}
-
       {/* ── States ── */}
       {loading ? (
         <div className="flex items-center justify-center py-16 text-slate-500">
@@ -646,80 +958,107 @@ export default function TransactionHistoryTable({ transactions, loading, error }
                     <th className="table-th text-center">Actions</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {filtered.map((tx) => {
-                    const termsCount = getPaymentTerms(tx).length;
-                    return (
-                      <tbody key={tx.id}>
-                        <tr className="table-row">
-                          <td className="table-td text-slate-400 text-sm whitespace-nowrap">{formatDate(tx.transactionDate)}</td>
-                          <td className="table-td">
-                            {tx.invoiceNumber ? (
-                              <span className="inline-flex items-center gap-1 text-xs font-mono font-bold text-indigo-300 bg-indigo-500/15 px-2 py-0.5 rounded border border-indigo-500/30">
-                                <FileText className="w-3 h-3 text-indigo-400" />
-                                {tx.invoiceNumber}
-                              </span>
-                            ) : (
-                              <span className="text-slate-600 text-xs">—</span>
-                            )}
-                          </td>
-                          <td className="table-td cursor-pointer" onClick={() => toggleExpand(tx.id)}>
-                            <p className="text-slate-200 font-semibold text-sm hover:text-indigo-300 transition-colors">{tx.partyName}</p>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              {termsCount > 0 && (
-                                <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-500/10 px-1.5 py-0.2 rounded">
-                                  {termsCount} term{termsCount > 1 ? "s" : ""}
-                                </span>
-                              )}
-                              {tx.returnOfTxId && <span className="text-[10px] text-amber-500">↩ Return</span>}
-                            </div>
-                          </td>
-                          <td className="table-td"><TypeBadge type={tx.type} /></td>
-                          <td className="table-td text-right text-slate-200 font-semibold num text-sm">{fmtINR(tx.totalAmount)}</td>
-                          <td className="table-td text-right text-emerald-400 num text-sm">{fmtINR(tx.amountPaid)}</td>
-                          <td className="table-td text-right num text-sm">
-                            <span className={tx.pendingDue > 0 ? "text-amber-400 font-semibold" : "text-slate-500"}>
-                              {fmtINR(tx.pendingDue)}
+                {filtered.map((tx) => {
+                  const termsCount = getPaymentTerms(tx).length;
+                  const isExpanded = expandedId === tx.id;
+                  return (
+                    <tbody key={tx.id}>
+                      <tr className="table-row">
+                        <td className="table-td text-slate-400 text-sm whitespace-nowrap">{formatDate(tx.transactionDate)}</td>
+                        <td className="table-td">
+                          {tx.invoiceNumber ? (
+                            <span className="inline-flex items-center gap-1 text-xs font-mono font-bold text-indigo-300 bg-indigo-500/15 px-2 py-0.5 rounded border border-indigo-500/30">
+                              <FileText className="w-3 h-3 text-indigo-400" />
+                              {tx.invoiceNumber}
                             </span>
-                          </td>
-                          <td className="table-td"><StatusBadge status={tx.status} /></td>
-                          <td className="table-td text-center">
-                            <div className="flex items-center justify-center gap-1">
-                              {/* Details */}
-                              <button onClick={() => toggleExpand(tx.id)} className="btn-icon" title="View details">
-                                <Eye className="w-3.5 h-3.5" />
+                          ) : (
+                            <span className="text-slate-600 text-xs">—</span>
+                          )}
+                        </td>
+                        <td className="table-td cursor-pointer" onClick={() => handleAction(tx.id, "details")}>
+                          <p className="text-slate-200 font-semibold text-sm hover:text-indigo-300 transition-colors">{tx.partyName}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            {termsCount > 0 && (
+                              <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-500/10 px-1.5 py-0.2 rounded">
+                                {termsCount} term{termsCount > 1 ? "s" : ""}
+                              </span>
+                            )}
+                            {tx.returnOfTxId && <span className="text-[10px] text-amber-500">↩ Return</span>}
+                          </div>
+                        </td>
+                        <td className="table-td"><TypeBadge type={tx.type} /></td>
+                        <td className="table-td text-right text-slate-200 font-semibold num text-sm">{fmtINR(tx.totalAmount)}</td>
+                        <td className="table-td text-right text-emerald-400 num text-sm">{fmtINR(tx.amountPaid)}</td>
+                        <td className="table-td text-right num text-sm">
+                          <span className={tx.pendingDue > 0 ? "text-amber-400 font-semibold" : "text-slate-500"}>
+                            {fmtINR(tx.pendingDue)}
+                          </span>
+                        </td>
+                        <td className="table-td"><StatusBadge status={tx.status} /></td>
+                        <td className="table-td text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            {/* Details Button */}
+                            <button
+                              type="button"
+                              onClick={() => handleAction(tx.id, "details")}
+                              className={`btn-icon ${isExpanded && expandedTab === "details" ? "text-indigo-400 bg-indigo-500/20" : ""}`}
+                              title="View details & terms"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+                            {/* Calendar Button */}
+                            <button
+                              type="button"
+                              onClick={() => handleAction(tx.id, "calendar")}
+                              className={`btn-icon ${isExpanded && expandedTab === "calendar" ? "text-indigo-400 bg-indigo-500/20" : ""}`}
+                              title="Change date"
+                            >
+                              <CalendarDays className="w-3.5 h-3.5" />
+                            </button>
+                            {/* Return Button */}
+                            {canReturn(tx) && (
+                              <button
+                                type="button"
+                                onClick={() => handleAction(tx.id, "return")}
+                                className={`p-2 rounded-lg text-amber-500 hover:text-amber-300 hover:bg-amber-500/10 transition-all duration-150 ${
+                                  isExpanded && expandedTab === "return" ? "bg-amber-500/20 text-amber-300" : ""
+                                }`}
+                                title="Record return"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" />
                               </button>
-                              {/* Calendar / Edit Date */}
-                              <button onClick={() => setEditingDate(tx)} className="btn-icon" title="Edit date">
-                                <CalendarDays className="w-3.5 h-3.5" />
+                            )}
+                            {/* Settle Button */}
+                            {tx.status === "Pending" && (
+                              <button
+                                type="button"
+                                onClick={() => handleAction(tx.id, "settle")}
+                                className={`btn-emerald text-xs py-1.5 px-2.5 ${
+                                  isExpanded && expandedTab === "settle" ? "ring-2 ring-emerald-400 ring-offset-1 ring-offset-slate-900" : ""
+                                }`}
+                              >
+                                <CreditCard className="w-3 h-3" /> Settle
                               </button>
-                              {/* Return */}
-                              {canReturn(tx) && (
-                                <button onClick={() => setReturning(tx)}
-                                  className="p-2 rounded-lg text-amber-500 hover:text-amber-300 hover:bg-amber-500/10 transition-all duration-150"
-                                  title="Record return">
-                                  <RotateCcw className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                              {/* Settle */}
-                              {tx.status === "Pending" && (
-                                <button onClick={() => setSettling(tx)}
-                                  className="btn-emerald text-xs py-1.5 px-2.5">
-                                  <CreditCard className="w-3 h-3" /> Settle
-                                </button>
-                              )}
-                            </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr key={`${tx.id}-detail`}>
+                          <td colSpan={9} className="p-0">
+                            <DetailDrawer
+                              tx={tx}
+                              uid={uid}
+                              activeTab={expandedTab}
+                              onTabChange={(tab) => setExpandedTab(tab)}
+                              onClose={() => setExpandedId(null)}
+                            />
                           </td>
                         </tr>
-                        {expanded === tx.id && (
-                          <tr key={`${tx.id}-detail`}>
-                            <td colSpan={9} className="p-0"><DetailDrawer tx={tx} /></td>
-                          </tr>
-                        )}
-                      </tbody>
-                    );
-                  })}
-                </tbody>
+                      )}
+                    </tbody>
+                  );
+                })}
               </table>
             </div>
           </div>
@@ -728,11 +1067,12 @@ export default function TransactionHistoryTable({ transactions, loading, error }
           <div className="md:hidden space-y-3">
             {filtered.map((tx) => {
               const termsCount = getPaymentTerms(tx).length;
+              const isExpanded = expandedId === tx.id;
               return (
                 <div key={tx.id} className="card overflow-hidden border border-slate-800/80 hover:border-slate-700 transition-all">
                   {/* Tap card body/header to toggle payment details */}
                   <div
-                    onClick={() => toggleExpand(tx.id)}
+                    onClick={() => handleAction(tx.id, "details")}
                     className="p-3.5 sm:p-4 cursor-pointer select-none active:bg-slate-800/40 transition-colors"
                   >
                     <div className="flex items-start justify-between gap-2 mb-2">
@@ -763,10 +1103,10 @@ export default function TransactionHistoryTable({ transactions, loading, error }
 
                     {/* Tap hint */}
                     <p className="text-[11px] text-indigo-400/90 font-medium mb-3 flex items-center gap-1">
-                      {expanded === tx.id ? (
-                        <span>▲ Tap card to hide details</span>
+                      {isExpanded ? (
+                        <span>▲ Tap card to hide</span>
                       ) : (
-                        <span>▼ Tap card to view payment terms & items</span>
+                        <span>▼ Tap card to view details & terms</span>
                       )}
                     </p>
 
@@ -796,28 +1136,38 @@ export default function TransactionHistoryTable({ transactions, loading, error }
                       </div>
                     )}
 
-                    {/* Mobile action buttons */}
+                    {/* Mobile action buttons: Directly expand inside the card */}
                     <div className="flex gap-2">
                       {/* Details */}
                       <button
-                        onClick={(e) => { e.stopPropagation(); toggleExpand(tx.id); }}
-                        className="btn-secondary flex-1 text-xs py-2 gap-1.5"
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleAction(tx.id, "details"); }}
+                        className={`btn-secondary flex-1 text-xs py-2 gap-1.5 ${
+                          isExpanded && expandedTab === "details" ? "bg-indigo-600/25 border-indigo-500/50 text-indigo-300" : ""
+                        }`}
                       >
-                        {expanded === tx.id ? <ChevronUp className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                        {expanded === tx.id ? "Hide Details" : "View Details"}
+                        {isExpanded && expandedTab === "details" ? <ChevronUp className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        {isExpanded && expandedTab === "details" ? "Hide" : "Details"}
                       </button>
                       {/* Calendar */}
                       <button
-                        onClick={(e) => { e.stopPropagation(); setEditingDate(tx); }}
-                        className="btn-secondary text-xs py-2 px-3" title="Edit date"
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleAction(tx.id, "calendar"); }}
+                        className={`btn-secondary text-xs py-2 px-3 ${
+                          isExpanded && expandedTab === "calendar" ? "bg-indigo-600 border-indigo-500 text-white" : ""
+                        }`}
+                        title="Change date"
                       >
                         <CalendarDays className="w-3.5 h-3.5" />
                       </button>
                       {/* Return */}
                       {canReturn(tx) && (
                         <button
-                          onClick={(e) => { e.stopPropagation(); setReturning(tx); }}
-                          className="text-xs py-2 px-3 rounded-xl border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 transition-all"
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleAction(tx.id, "return"); }}
+                          className={`text-xs py-2 px-3 rounded-xl border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 transition-all ${
+                            isExpanded && expandedTab === "return" ? "bg-amber-600 border-amber-500 text-white" : ""
+                          }`}
                           title="Record return"
                         >
                           <RotateCcw className="w-3.5 h-3.5" />
@@ -826,8 +1176,11 @@ export default function TransactionHistoryTable({ transactions, loading, error }
                       {/* Settle */}
                       {tx.status === "Pending" && (
                         <button
-                          onClick={(e) => { e.stopPropagation(); setSettling(tx); }}
-                          className="btn-emerald flex-1 text-xs py-2"
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleAction(tx.id, "settle"); }}
+                          className={`btn-emerald flex-1 text-xs py-2 ${
+                            isExpanded && expandedTab === "settle" ? "ring-2 ring-emerald-400 ring-offset-2 ring-offset-slate-900" : ""
+                          }`}
                         >
                           <CreditCard className="w-3 h-3" /> Settle
                         </button>
@@ -835,9 +1188,16 @@ export default function TransactionHistoryTable({ transactions, loading, error }
                     </div>
                   </div>
 
-                  {expanded === tx.id && (
+                  {/* Inline drawer directly in the card */}
+                  {isExpanded && (
                     <div className="border-t border-slate-800 bg-slate-950/70">
-                      <DetailDrawer tx={tx} />
+                      <DetailDrawer
+                        tx={tx}
+                        uid={uid}
+                        activeTab={expandedTab}
+                        onTabChange={(tab) => setExpandedTab(tab)}
+                        onClose={() => setExpandedId(null)}
+                      />
                     </div>
                   )}
                 </div>
