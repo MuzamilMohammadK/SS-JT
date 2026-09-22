@@ -7,7 +7,7 @@ export default function ReceivablePayableBar({ transactions }) {
     let totalAR = 0, paidAR = 0, totalAP = 0, paidAP = 0;
 
     transactions.forEach((tx) => {
-      if (tx.type === "Given") {
+      if (tx.type === "Sale" || tx.type === "Given" || tx.type === "Sale Return") {
         totalAR += tx.totalAmount  || 0;
         paidAR  += tx.amountPaid  || 0;
       } else {
@@ -77,7 +77,7 @@ export default function ReceivablePayableBar({ transactions }) {
       {/* AR/AP Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <MetricCard
-          label="Accounts Receivable (Given)"
+          label="Total Sales (Receivable)"
           total={stats.totalAR}
           paid={stats.paidAR}
           pending={stats.pendingAR}
@@ -86,7 +86,7 @@ export default function ReceivablePayableBar({ transactions }) {
           pct={stats.arPct}
         />
         <MetricCard
-          label="Accounts Payable (Taken)"
+          label="Total Purchases (Payable)"
           total={stats.totalAP}
           paid={stats.paidAP}
           pending={stats.pendingAP}
@@ -129,8 +129,8 @@ export default function ReceivablePayableBar({ transactions }) {
         {/* AR vs AP ratio bar */}
         <div className="mt-4">
           <div className="flex justify-between text-xs text-slate-500 mb-1.5">
-            <span>Receivable {stats.arPct}%</span>
-            <span>Payable {stats.apPct}%</span>
+            <span>Sales {stats.arPct}%</span>
+            <span>Purchases {stats.apPct}%</span>
           </div>
           <div className="h-2.5 rounded-full overflow-hidden bg-slate-800 flex">
             <div

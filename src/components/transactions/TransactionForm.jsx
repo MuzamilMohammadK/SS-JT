@@ -5,7 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import { validatePositive } from "../../utils/validators";
 import {
   Plus, Trash2, Receipt, IndianRupee, ShoppingBag,
-  ChevronDown, ChevronUp,
+  ChevronDown, ChevronUp, ArrowUpRight, ArrowDownLeft, RotateCcw,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -15,7 +15,7 @@ const EMPTY_ROW = { sareeName: "", quantity: "", pricePerUnit: "" };
 function getInitialForm() {
   return {
     partyId:         "",
-    type:            "Given",
+    type:            "Sale",
     sareeDetails:    [{ ...EMPTY_ROW }],
     amountPaid:      "",
     transactionDate: new Date().toISOString().slice(0, 10),
@@ -197,22 +197,32 @@ export default function TransactionForm({ parties }) {
             {formErrors.partyId && <p className="text-rose-400 text-xs">{formErrors.partyId}</p>}
           </div>
 
-          {/* Transaction Type toggle */}
+          {/* Transaction Type — 2×2 card grid */}
           <div className="field">
             <label className="label">Transaction Type</label>
-            <div className="flex gap-2 mt-1">
-              {["Given", "Taken"].map((t) => (
-                <label key={t} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border cursor-pointer text-sm font-semibold transition-all duration-200 ${
-                  form.type === t
-                    ? t === "Given"
-                      ? "bg-indigo-500/20 border-indigo-500/50 text-indigo-300"
-                      : "bg-rose-500/20 border-rose-500/50 text-rose-300"
-                    : "bg-slate-800/50 border-slate-700/60 text-slate-500 hover:text-slate-300"
-                }`}>
-                  <input type="radio" name="tx-type" value={t} checked={form.type === t}
-                    onChange={() => setForm((f) => ({ ...f, type: t }))} className="sr-only" />
-                  {t === "Given" ? "Given (Credit)" : "Taken (Due)"}
-                </label>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { value: "Sale",            label: "Sale",            sub: "Sold to customer",         Icon: ArrowUpRight,  cls: "indigo" },
+                { value: "Purchase",        label: "Purchase",        sub: "Received from supplier",   Icon: ArrowDownLeft, cls: "rose"   },
+                { value: "Sale Return",     label: "Sale Return",     sub: "Customer returned sarees", Icon: RotateCcw,     cls: "amber"  },
+                { value: "Purchase Return", label: "Purchase Return", sub: "Returned to supplier",     Icon: RotateCcw,     cls: "teal"   },
+              ].map(({ value, label, sub, Icon, cls }) => (
+                <button key={value} type="button"
+                  onClick={() => setForm((f) => ({ ...f, type: value }))}
+                  className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all duration-200 ${
+                    form.type === value
+                      ? cls === "indigo" ? "bg-indigo-500/20 border-indigo-500/50 text-indigo-300"
+                      : cls === "rose"   ? "bg-rose-500/20 border-rose-500/50 text-rose-300"
+                      : cls === "amber"  ? "bg-amber-500/20 border-amber-500/50 text-amber-300"
+                      :                    "bg-teal-500/20 border-teal-500/50 text-teal-300"
+                      : "bg-slate-800/50 border-slate-700/60 text-slate-500 hover:text-slate-300"
+                  }`}>
+                  <Icon className="w-4 h-4 flex-shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold leading-tight">{label}</p>
+                    <p className="text-[10px] opacity-70 truncate mt-0.5">{sub}</p>
+                  </div>
+                </button>
               ))}
             </div>
           </div>

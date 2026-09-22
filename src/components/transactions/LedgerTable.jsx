@@ -5,6 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import {
   CheckCircle2, Clock, Loader2, FileText, ChevronDown, ChevronUp,
   IndianRupee, Filter, Trash2, AlertTriangle, Search, X,
+  ArrowUpRight, ArrowDownLeft, RotateCcw,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -23,10 +24,17 @@ const StatusBadge = ({ status }) =>
     ? <span className="badge-emerald"><CheckCircle2 className="w-3 h-3" />Settled</span>
     : <span className="badge-amber"><Clock className="w-3 h-3" />Pending</span>;
 
-const TypeBadge = ({ type }) =>
-  type === "Given"
-    ? <span className="badge-indigo">Given · Credit</span>
-    : <span className="badge-rose">Taken · Due</span>;
+const TypeBadge = ({ type }) => {
+  if (type === "Sale" || type === "Given")
+    return <span className="badge-indigo"><ArrowUpRight className="w-3 h-3" />Sale</span>;
+  if (type === "Purchase" || type === "Taken")
+    return <span className="badge-rose"><ArrowDownLeft className="w-3 h-3" />Purchase</span>;
+  if (type === "Sale Return")
+    return <span className="badge-amber"><RotateCcw className="w-3 h-3" />Sale Return</span>;
+  if (type === "Purchase Return")
+    return <span className="badge-teal"><RotateCcw className="w-3 h-3" />Purchase Return</span>;
+  return <span className="badge-slate">{type}</span>;
+};
 
 // ── Confirm Delete Dialog ─────────────────────────────────────
 function ConfirmDialog({ onConfirm, onCancel }) {
@@ -172,7 +180,15 @@ export default function LedgerTable({ transactions, parties, loading }) {
   const filtered = transactions.filter((tx) => {
     if (statusFilter !== "All" && tx.status !== statusFilter) return false;
     if (partyFilter  !== "All" && tx.partyId !== partyFilter) return false;
-    if (typeFilter   !== "All" && tx.type !== typeFilter)     return false;
+    if (typeFilter !== "All") {
+      if (typeFilter === "Sale") {
+        if (tx.type !== "Sale" && tx.type !== "Given") return false;
+      } else if (typeFilter === "Purchase") {
+        if (tx.type !== "Purchase" && tx.type !== "Taken") return false;
+      } else if (tx.type !== typeFilter) {
+        return false;
+      }
+    }
     if (search) {
       const q = search.toLowerCase();
       const pName = (partyMap[tx.partyId] || "").toLowerCase();
@@ -212,7 +228,7 @@ export default function LedgerTable({ transactions, parties, loading }) {
 
           {[
             { value: statusFilter, onChange: setStatusFilter, options: [["All", "All Statuses"], ["Pending", "Pending"], ["Settled", "Settled"]] },
-            { value: typeFilter,   onChange: setTypeFilter,   options: [["All", "All Types"], ["Given", "Given (Credit)"], ["Taken", "Taken (Due)"]] },
+            { value: typeFilter,   onChange: setTypeFilter,   options: [["All", "All Types"], ["Sale", "Sale"], ["Purchase", "Purchase"], ["Sale Return", "Sale Return"], ["Purchase Return", "Purchase Return"]] },
           ].map(({ value, onChange, options }, i) => (
             <select key={i} value={value} onChange={(e) => onChange(e.target.value)}
               className="input-base w-auto text-xs py-1.5 px-3 cursor-pointer">

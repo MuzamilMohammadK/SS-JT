@@ -56,7 +56,7 @@ export default function PartyDuesChart({ transactions, parties }) {
       <div className="space-y-3">
         {partyDues.map((item, i) => {
           const widthPct = Math.round((item.pendingDue / maxDue) * 100);
-          const isGiven  = item.type === "Given";
+          const isSale   = item.type === "Sale" || item.type === "Given" || item.type === "Sale Return";
 
           return (
             <div key={item.partyId} className="space-y-1.5">
@@ -66,9 +66,9 @@ export default function PartyDuesChart({ transactions, parties }) {
                     {i + 1}.
                   </span>
                   <div className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                    isGiven ? "bg-indigo-500/15" : "bg-rose-500/15"
+                    isSale ? "bg-indigo-500/15" : "bg-rose-500/15"
                   }`}>
-                    {isGiven
+                    {isSale
                       ? <ArrowUpRight className="w-3.5 h-3.5 text-indigo-400" />
                       : <ArrowDownLeft className="w-3.5 h-3.5 text-rose-400" />
                     }

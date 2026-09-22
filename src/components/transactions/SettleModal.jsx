@@ -33,7 +33,7 @@ export default function SettleModal({ transaction: tx, onClose }) {
 
   if (!tx) return null;
 
-  const isTaken      = tx.type === "Taken";
+  const isPurchase   = tx.type === "Purchase" || tx.type === "Taken" || tx.type === "Purchase Return";
   const existingLogs = tx.paymentLogs || [];
 
   // Safely parse numerical values regardless of whether Firestore returned strings or numbers
@@ -73,7 +73,7 @@ export default function SettleModal({ transaction: tx, onClose }) {
       const logEntry = {
         amount: paid,
         date:   new Date().toISOString(),
-        type:   isTaken ? "Payment to Supplier" : "Receipt from Customer",
+        type:   isPurchase ? "Payment to Supplier" : "Receipt from Customer",
       };
 
       await updateDoc(doc(db, "users", uid, "transactions", tx.id), {
@@ -123,16 +123,16 @@ export default function SettleModal({ transaction: tx, onClose }) {
         <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-800/60 sticky top-0 bg-slate-900/95 backdrop-blur-sm z-10 gap-3">
           <div className="flex items-center gap-3 min-w-0 flex-1">
             <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
-              isTaken ? "bg-rose-500/15 text-rose-400" : "bg-emerald-500/15 text-emerald-400"
+              isPurchase ? "bg-rose-500/15 text-rose-400" : "bg-emerald-500/15 text-emerald-400"
             }`}>
               <CreditCard className="w-5 h-5" />
             </div>
             <div className="min-w-0">
               <h2 className="text-slate-100 font-semibold text-[15px] truncate">
-                {isTaken ? "Settle Payable (Taken)" : "Settle Receivable (Given)"}
+                {isPurchase ? "Settle Payable (Purchase)" : "Settle Receivable (Sale)"}
               </h2>
               <p className="text-slate-500 text-xs truncate" title={tx.partyName}>
-                {isTaken ? `Paying to ${tx.partyName}` : `Receiving from ${tx.partyName}`}
+                {isPurchase ? `Paying to ${tx.partyName}` : `Receiving from ${tx.partyName}`}
               </p>
             </div>
           </div>

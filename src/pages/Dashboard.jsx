@@ -91,7 +91,7 @@ export default function Dashboard() {
             <SectionHeader
               icon={BookOpen}
               title="Transaction History"
-              sub="Complete ledger of all given and taken transactions"
+              sub="Complete ledger of all sales, purchases & returns"
               iconColor="text-teal-400"
               iconBg="bg-teal-500/15"
             />

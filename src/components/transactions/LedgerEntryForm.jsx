@@ -8,6 +8,7 @@ import {
 import {
   Plus, Trash2, Receipt, IndianRupee, ShoppingBag,
   ChevronDown, ChevronUp, Calculator, Users,
+  ArrowUpRight, ArrowDownLeft, RotateCcw,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -17,7 +18,7 @@ const EMPTY_ROW = { sareeName: "", quantity: "", pricePerUnit: "" };
 function getInitialForm() {
   return {
     partyId:         "",
-    type:            "Given",
+    type:            "Sale",
     sareeDetails:    [{ ...EMPTY_ROW }],
     gstRate:         "",
     amountPaid:      "",
@@ -263,9 +264,10 @@ export default function LedgerEntryForm({ parties }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Party + Date row */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Party */}
-          <div className="field md:col-span-1">
+          <div className="field">
             <label htmlFor="le-party" className="label flex items-center gap-1">
               <Users className="w-3 h-3" /> Party
             </label>
@@ -281,25 +283,41 @@ export default function LedgerEntryForm({ parties }) {
             {errors.partyId && <p className="text-rose-400 text-xs">{errors.partyId}</p>}
           </div>
 
-          {/* Type */}
-          <div className="field">
-            <label htmlFor="le-type" className="label">Transaction Type</label>
-            <div className="tab-bar">
-              {["Given", "Taken"].map((t) => (
-                <button key={t} type="button"
-                  onClick={() => setForm((f) => ({ ...f, type: t }))}
-                  className={`tab-item${form.type === t ? " active" : ""}`}>
-                  {t === "Given" ? "Given (Sold)" : "Taken (Received)"}
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* Date */}
           <div className="field">
             <label htmlFor="le-date" className="label">Transaction Date</label>
             <input id="le-date" type="date" value={form.transactionDate}
               onChange={setTop("transactionDate")} className="input-base" />
+          </div>
+        </div>
+
+        {/* Transaction Type — 2×2 card grid */}
+        <div className="field">
+          <label className="label">Transaction Type</label>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { value: "Sale",            label: "Sale",            sub: "Sold to customer",         Icon: ArrowUpRight,  cls: "indigo" },
+              { value: "Purchase",        label: "Purchase",        sub: "Received from supplier",   Icon: ArrowDownLeft, cls: "rose"   },
+              { value: "Sale Return",     label: "Sale Return",     sub: "Customer returned sarees", Icon: RotateCcw,     cls: "amber"  },
+              { value: "Purchase Return", label: "Purchase Return", sub: "Returned to supplier",     Icon: RotateCcw,     cls: "teal"   },
+            ].map(({ value, label, sub, Icon, cls }) => (
+              <button key={value} type="button"
+                onClick={() => setForm((f) => ({ ...f, type: value }))}
+                className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all duration-200 ${
+                  form.type === value
+                    ? cls === "indigo" ? "bg-indigo-500/15 border-indigo-500/40 text-indigo-300"
+                    : cls === "rose"   ? "bg-rose-500/15 border-rose-500/40 text-rose-300"
+                    : cls === "amber"  ? "bg-amber-500/15 border-amber-500/40 text-amber-300"
+                    :                    "bg-teal-500/15 border-teal-500/40 text-teal-300"
+                    : "bg-slate-800/40 border-slate-700/40 text-slate-400 hover:border-slate-600 hover:text-slate-300"
+                }`}>
+                <Icon className="w-4 h-4 flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs font-bold leading-tight">{label}</p>
+                  <p className="text-[10px] opacity-70 truncate mt-0.5">{sub}</p>
+                </div>
+              </button>
+            ))}
           </div>
         </div>
       </div>
@@ -396,7 +414,11 @@ export default function LedgerEntryForm({ parties }) {
           {/* Amount Paid Initially */}
           <div className="field">
             <label htmlFor="le-paid" className="label flex items-center justify-between">
-              <span>{form.type === "Taken" ? "Amount Paid Upfront (₹)" : "Amount Paid Initially (₹)"}</span>
+              <span>{
+                form.type === "Purchase" ? "Amount Paid Upfront (₹)"
+                : (form.type === "Sale Return" || form.type === "Purchase Return") ? "Refund Amount (₹)"
+                : "Amount Paid Initially (₹)"
+              }</span>
               {totalAmount > 0 && (
                 <button
                   type="button"
@@ -406,7 +428,9 @@ export default function LedgerEntryForm({ parties }) {
                   }}
                   className="text-[10px] text-emerald-400 hover:text-emerald-300 font-semibold normal-case tracking-normal transition-colors"
                 >
-                  {form.type === "Taken" ? "Mark Fully Settled" : "Mark Fully Paid"}
+                  {form.type === "Purchase" ? "Mark Fully Settled"
+                   : (form.type === "Sale Return" || form.type === "Purchase Return") ? "Full Refund"
+                   : "Mark Fully Paid"}
                 </button>
               )}
             </label>

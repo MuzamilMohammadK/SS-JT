@@ -35,16 +35,16 @@ const fmt = (n) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
 
 export default function SummaryBanner({ transactions }) {
-  const totalGiven   = transactions.filter((t) => t.type === "Given").reduce((s, t) => s + (t.totalAmount || 0), 0);
-  const totalTaken   = transactions.filter((t) => t.type === "Taken").reduce((s, t) => s + (t.totalAmount || 0), 0);
+  const totalSales   = transactions.filter((t) => t.type === "Sale" || t.type === "Given").reduce((s, t) => s + (t.totalAmount || 0), 0);
+  const totalPurchases = transactions.filter((tx) => tx.type === "Purchase" || tx.type === "Taken").reduce((s, t) => s + (t.totalAmount || 0), 0);
   const totalPending = transactions.filter((t) => t.status === "Pending").reduce((s, t) => s + (t.pendingDue || 0), 0);
   const settledCount = transactions.filter((t) => t.status === "Settled").length;
 
   const cards = [
     {
-      title: "Accounts Receivable",
-      value: fmt(totalGiven),
-      subtitle: "Total credit extended",
+      title: "Total Sales",
+      value: fmt(totalSales),
+      subtitle: "Total sales revenue",
       icon: TrendingUp,
       colorClass: "text-indigo-400",
       bgClass: "bg-indigo-500/15",
@@ -52,9 +52,9 @@ export default function SummaryBanner({ transactions }) {
       delay: "stagger-1",
     },
     {
-      title: "Accounts Payable",
-      value: fmt(totalTaken),
-      subtitle: "Total amount owed",
+      title: "Total Purchases",
+      value: fmt(totalPurchases),
+      subtitle: "Total purchases from suppliers",
       icon: TrendingDown,
       colorClass: "text-rose-400",
       bgClass: "bg-rose-500/15",

@@ -39,12 +39,12 @@ export default function SummaryCards({ transactions }) {
       maximumFractionDigits: 0,
     }).format(n);
 
-  const totalGiven = transactions
-    .filter((t) => t.type === "Given")
+  const totalSales = transactions
+    .filter((t) => t.type === "Sale" || t.type === "Given")
     .reduce((s, t) => s + (t.totalAmount || 0), 0);
 
-  const totalTaken = transactions
-    .filter((t) => t.type === "Taken")
+  const totalPurchases = transactions
+    .filter((t) => t.type === "Purchase" || t.type === "Taken")
     .reduce((s, t) => s + (t.totalAmount || 0), 0);
 
   const totalPending = transactions
@@ -55,18 +55,18 @@ export default function SummaryCards({ transactions }) {
 
   const cards = [
     {
-      title: "Accounts Receivable (Given)",
-      value: fmt(totalGiven),
-      subtitle: "Total credit extended to customers",
+      title: "Total Sales",
+      value: fmt(totalSales),
+      subtitle: "Total sales made to customers",
       icon: TrendingUp,
       colorClass: "text-indigo-400",
       bgClass: "bg-indigo-500/15",
       glowClass: "bg-gradient-to-br from-indigo-500/5 to-transparent",
     },
     {
-      title: "Accounts Payable (Taken)",
-      value: fmt(totalTaken),
-      subtitle: "Total amount owed to suppliers",
+      title: "Total Purchases",
+      value: fmt(totalPurchases),
+      subtitle: "Total purchases from suppliers",
       icon: TrendingDown,
       colorClass: "text-rose-400",
       bgClass: "bg-rose-500/15",

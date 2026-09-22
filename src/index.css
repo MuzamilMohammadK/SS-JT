@@ -26,8 +26,17 @@
 
   /* ── Date input calendar icon ── */
   input[type="date"]::-webkit-calendar-picker-indicator {
-    filter: invert(0.5);
+    filter: invert(0.6) brightness(1.4);
     cursor: pointer;
+    padding: 4px;
+    border-radius: 6px;
+    /* Larger tap target on mobile */
+    width: 24px;
+    height: 24px;
+  }
+  input[type="date"]::-webkit-calendar-picker-indicator:hover {
+    filter: invert(0.8) brightness(1.6);
+    background: rgba(99,102,241,0.15);
   }
 
   /* ── Number input arrows ── */
@@ -242,6 +251,10 @@
   from { opacity: 0; transform: translateY(20px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+@keyframes slideInUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
 @keyframes shimmer {
   0%   { background-position: -200% 0; }
   100% { background-position:  200% 0; }
@@ -260,6 +273,7 @@
   .animate-fade-in-scale { animation: fadeInScale 0.25s ease-out both; }
   .animate-slide-in-down { animation: slideInDown 0.25s ease-out both; }
   .animate-slide-up      { animation: slideUp     0.3s  ease-out both; }
+  .animate-slide-in-up   { animation: slideInUp   0.35s cubic-bezier(0.32,0.72,0,1) both; }
   .animate-glow-pulse    { animation: glowPulse 2.5s ease-in-out infinite; }
 
   /* Stagger helpers for lists */
