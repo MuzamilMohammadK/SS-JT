@@ -104,6 +104,16 @@ function TxRow({ tx, partyName, uid }) {
       <tr className="table-row">
         <td className="table-td text-slate-400 text-xs font-medium whitespace-nowrap num">{fmtDate(tx.transactionDate)}</td>
         <td className="table-td">
+          {tx.invoiceNumber ? (
+            <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-indigo-300 bg-indigo-500/15 px-2 py-0.5 rounded border border-indigo-500/25">
+              <FileText className="w-3 h-3 text-indigo-400" />
+              {tx.invoiceNumber}
+            </span>
+          ) : (
+            <span className="text-slate-600 text-xs">—</span>
+          )}
+        </td>
+        <td className="table-td">
           <p className="text-slate-200 text-sm font-semibold max-w-[140px] truncate">{partyName}</p>
         </td>
         <td className="table-td"><TypeBadge type={tx.type} /></td>
@@ -140,7 +150,7 @@ function TxRow({ tx, partyName, uid }) {
       {/* Expanded saree details */}
       {expanded && tx.sareeDetails?.length > 0 && (
         <tr className="border-b border-slate-800/40 bg-slate-900/40">
-          <td colSpan={8} className="px-6 py-4">
+          <td colSpan={9} className="px-6 py-4">
             <p className="text-slate-600 text-xs font-semibold uppercase tracking-widest mb-3">Inventory Items</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
               {tx.sareeDetails.map((s, i) => (
@@ -192,7 +202,7 @@ export default function LedgerTable({ transactions, parties, loading }) {
     if (search) {
       const q = search.toLowerCase();
       const pName = (partyMap[tx.partyId] || "").toLowerCase();
-      if (!pName.includes(q) && !tx.notes?.toLowerCase().includes(q)) return false;
+      if (!pName.includes(q) && !tx.notes?.toLowerCase().includes(q) && !tx.invoiceNumber?.toLowerCase().includes(q)) return false;
     }
     return true;
   });
@@ -266,7 +276,7 @@ export default function LedgerTable({ transactions, parties, loading }) {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-800">
-                {["Date", "Party", "Type", "Total", "Paid", "Pending Due", "Status", "Actions"].map((h) => (
+                {["Date", "Invoice #", "Party", "Type", "Total", "Paid", "Pending Due", "Status", "Actions"].map((h) => (
                   <th key={h} className="table-th">{h}</th>
                 ))}
               </tr>

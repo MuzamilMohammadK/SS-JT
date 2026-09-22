@@ -7,7 +7,7 @@ import SettleModal from "./SettleModal";
 import {
   Search, X, BookOpen, ArrowUpRight, ArrowDownLeft,
   CheckCircle2, Clock, ChevronUp, Eye, CreditCard,
-  Loader2, AlertCircle, CalendarDays, RotateCcw,
+  Loader2, AlertCircle, CalendarDays, RotateCcw, FileText,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -47,32 +47,169 @@ function logDate(isoStr) {
 }
 
 // ── Detail Drawer ─────────────────────────────────────────────
+// ── Compute unified payment terms / installments ──────────────
+function getPaymentTerms(tx) {
+  const rawLogs = tx.paymentLogs || [];
+  const logSum = rawLogs.reduce((sum, l) => sum + (Number(l.amount) || 0), 0);
+  const totalPaid = Number(tx.amountPaid) || 0;
+  const initialAmount = parseFloat(Math.max(0, totalPaid - logSum).toFixed(2));
+
+  const terms = [];
+
+  if (initialAmount > 0.005) {
+    terms.push({
+      termNumber: 1,
+      title: "Term 1 · Initial Payment",
+      date: tx.transactionDate,
+      amount: initialAmount,
+      type: (tx.type === "Purchase" || tx.type === "Taken") ? "Payment to Supplier" : "Receipt from Customer",
+      isInitial: true,
+    });
+  }
+
+  rawLogs.forEach((log) => {
+    terms.push({
+      termNumber: terms.length + 1,
+      title: `Term ${terms.length + 1} · ${log.type || "Installment"}`,
+      date: log.date ? log.date.slice(0, 10) : tx.transactionDate,
+      rawDate: log.date,
+      amount: Number(log.amount) || 0,
+      type: log.type || "Settlement Payment",
+      isInitial: false,
+    });
+  });
+
+  let cumulative = 0;
+  const total = Number(tx.totalAmount) || 0;
+  return terms.map((t) => {
+    cumulative = parseFloat((cumulative + t.amount).toFixed(2));
+    const balanceAfter = parseFloat(Math.max(0, total - cumulative).toFixed(2));
+    return { ...t, cumulative, balanceAfter };
+  });
+}
+
+// ── Detail Drawer ─────────────────────────────────────────────
 function DetailDrawer({ tx }) {
-  const logs = tx.paymentLogs || [];
+  const terms = getPaymentTerms(tx);
+  const total = Number(tx.totalAmount) || 0;
+  const paid  = Number(tx.amountPaid) || 0;
+  const due   = Number(tx.pendingDue) || 0;
+  const pct   = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
+
   return (
-    <div className="px-4 pb-4 animate-slide-up">
-      <div className="card bg-slate-950/60 p-4 mt-2 space-y-3">
+    <div className="px-3.5 pb-4 sm:px-4 animate-slide-up">
+      <div className="card bg-slate-950/80 border border-slate-800 p-4 mt-2 space-y-4">
+
+        {/* Invoice & Party Header */}
+        <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-3 flex-wrap">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-indigo-500/15 flex items-center justify-center flex-shrink-0">
+              <FileText className="w-4 h-4 text-indigo-400" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-slate-100 font-bold text-sm">{tx.partyName}</span>
+                {tx.invoiceNumber && (
+                  <span className="text-xs font-mono font-bold text-indigo-300 bg-indigo-500/20 px-2 py-0.5 rounded border border-indigo-500/30">
+                    Invoice #{tx.invoiceNumber}
+                  </span>
+                )}
+              </div>
+              <p className="text-slate-500 text-xs mt-0.5">Date: {formatDate(tx.transactionDate)}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <TypeBadge type={tx.type} />
+            <StatusBadge status={tx.status} />
+          </div>
+        </div>
+
+        {/* ── Payment Details & Term-by-Term Installments ── */}
+        <div className="rounded-2xl bg-slate-900/90 border border-slate-800 p-3.5 sm:p-4 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <CreditCard className="w-4 h-4 text-emerald-400" />
+              <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                Payment Installment Terms ({terms.length} {terms.length === 1 ? "term" : "terms"})
+              </h4>
+            </div>
+            <span className={`text-xs font-bold num ${due <= 0 ? "text-emerald-400" : "text-amber-400"}`}>
+              {due <= 0 ? "✅ 100% Settled" : `${fmtINR(due)} Due`}
+            </span>
+          </div>
+
+          {terms.length === 0 ? (
+            <div className="p-3 rounded-xl bg-slate-800/40 text-center">
+              <p className="text-slate-400 text-xs font-medium">No payments received yet.</p>
+              <p className="text-slate-600 text-[11px] mt-0.5">Total invoice amount {fmtINR(total)} is pending.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {terms.map((term, i) => (
+                <div
+                  key={i}
+                  className="rounded-xl p-3 bg-slate-800/60 border border-slate-700/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:border-emerald-500/30 transition-all"
+                >
+                  <div className="flex items-start sm:items-center gap-2.5 min-w-0">
+                    <span className="w-6 h-6 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center justify-center flex-shrink-0">
+                      {term.termNumber}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-slate-100 font-semibold text-xs">{term.title}</span>
+                        <span className="text-slate-500 text-[11px]">📅 {formatDate(term.date)}</span>
+                      </div>
+                      <p className="text-slate-400 text-[11px] truncate">{term.type}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between sm:justify-end gap-3 border-t sm:border-0 border-slate-700/40 pt-1.5 sm:pt-0 sm:text-right">
+                    <div>
+                      <p className="text-emerald-400 font-bold text-sm num">+ {fmtINR(term.amount)}</p>
+                      <p className="text-slate-500 text-[10px] num">Remaining: {fmtINR(term.balanceAfter)}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Progress bar */}
+          <div className="pt-2 border-t border-slate-800/80 space-y-1.5 text-xs">
+            <div className="flex justify-between items-center text-slate-400">
+              <span>Total: <strong className="text-white num">{fmtINR(total)}</strong></span>
+              <span>Paid: <strong className="text-emerald-400 num">{fmtINR(paid)}</strong></span>
+              <span>Due: <strong className={due > 0 ? "text-amber-400 num" : "text-slate-500 num"}>{fmtINR(due)}</strong></span>
+            </div>
+            <div className="progress-track h-2">
+              <div className="progress-fill bg-emerald-500" style={{ width: `${pct}%` }} />
+            </div>
+            <p className="text-[10px] text-slate-500 text-right">
+              {pct}% completed ({terms.length} term{terms.length !== 1 ? "s" : ""} paid)
+            </p>
+          </div>
+        </div>
 
         {/* Saree items */}
         <div>
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Saree Items</p>
           <div className="space-y-1.5">
             {(tx.sareeDetails || []).map((item, i) => (
-              <div key={i} className="flex items-center justify-between text-sm gap-2">
-                <span className="text-slate-300 truncate min-w-0 flex-1">
+              <div key={i} className="flex items-center justify-between text-sm gap-2 bg-slate-900/50 p-2.5 rounded-xl border border-slate-800/60">
+                <span className="text-slate-300 truncate min-w-0 flex-1 text-xs sm:text-sm">
                   {item.sareeName} <span className="text-slate-500 text-xs">×{item.quantity}</span>
                 </span>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <span className="text-slate-500 text-xs">@ {fmtINR(item.pricePerUnit)}</span>
-                  <span className="text-slate-200 num font-medium">{fmtINR(item.subtotal ?? item.lineTotal)}</span>
+                  <span className="text-slate-200 num font-medium text-xs sm:text-sm">{fmtINR(item.subtotal ?? item.lineTotal)}</span>
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Financial breakdown */}
-        <div className="border-t border-slate-800 pt-3 space-y-1.5 text-sm">
+        {/* Financial Breakdown */}
+        <div className="border-t border-slate-800 pt-3 space-y-1.5 text-xs sm:text-sm">
           <div className="flex justify-between items-center gap-2">
             <span className="text-slate-500 flex-shrink-0">Subtotal</span>
             <span className="text-slate-300 num truncate">{fmtINR(tx.subTotalAmount ?? tx.totalAmount)}</span>
@@ -87,55 +224,13 @@ function DetailDrawer({ tx }) {
             <span className="text-white flex-shrink-0">Total Amount</span>
             <span className="text-white num truncate">{fmtINR(tx.totalAmount)}</span>
           </div>
-          <div className="flex justify-between items-center gap-2">
-            <span className="text-slate-500 flex-shrink-0">Amount Paid</span>
-            <span className="text-emerald-400 num truncate">{fmtINR(tx.amountPaid)}</span>
-          </div>
-          <div className="flex justify-between items-center gap-2">
-            <span className="text-amber-400 font-semibold flex-shrink-0">Pending Due</span>
-            <span className={`num font-semibold truncate ${tx.pendingDue > 0 ? "text-amber-400" : "text-emerald-400"}`}>
-              {fmtINR(tx.pendingDue)}
-            </span>
-          </div>
-          {tx.totalAmount > 0 && (
-            <div className="pt-1">
-              <div className="progress-track h-1.5">
-                <div className="progress-fill bg-emerald-500"
-                  style={{ width: `${Math.min(100, Math.round((tx.amountPaid / tx.totalAmount) * 100))}%` }} />
-              </div>
-              <p className="text-[10px] text-slate-600 mt-1 text-right">
-                {Math.round((tx.amountPaid / tx.totalAmount) * 100)}% settled
-              </p>
-            </div>
-          )}
         </div>
 
-        {/* Payment history */}
-        {logs.length > 0 && (
-          <div className="border-t border-slate-800 pt-3">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-              Payment History ({logs.length} payment{logs.length > 1 ? "s" : ""})
-            </p>
-            <div className="space-y-1.5">
-              {logs.map((log, i) => (
-                <div key={i} className="flex justify-between items-center text-sm py-1 border-b border-slate-800/40 last:border-0 gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="w-4 h-4 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-[9px] font-bold flex-shrink-0">
-                      {i + 1}
-                    </span>
-                    <span className="text-slate-500 text-xs truncate">{logDate(log.date)}</span>
-                  </div>
-                  <span className="text-emerald-400 font-semibold num flex-shrink-0">{fmtINR(log.amount)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
+        {/* Notes */}
         {tx.notes && (
-          <div className="border-t border-slate-800 pt-3">
+          <div className="border-t border-slate-800 pt-2.5">
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Notes</p>
-            <p className="text-slate-400 text-sm break-words">{tx.notes}</p>
+            <p className="text-slate-400 text-xs break-words">📝 {tx.notes}</p>
           </div>
         )}
       </div>
@@ -421,7 +516,10 @@ export default function TransactionHistoryTable({ transactions, loading, error }
 
   const filtered = tabFiltered.filter((tx) => {
     const q           = searchParty.trim().toLowerCase();
-    const matchParty  = !q || tx.partyName?.toLowerCase().includes(q);
+    const matchParty  = !q
+      || tx.partyName?.toLowerCase().includes(q)
+      || tx.invoiceNumber?.toLowerCase().includes(q)
+      || tx.notes?.toLowerCase().includes(q);
     const matchStatus = filterStatus === "All"
       ? true
       : filterStatus === "Returns"
@@ -479,7 +577,7 @@ export default function TransactionHistoryTable({ transactions, loading, error }
         <div className="relative flex-1 min-w-0">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
           <input type="text" value={searchParty} onChange={(e) => setSearchParty(e.target.value)}
-            placeholder="Search by party name…"
+            placeholder="Search by party, invoice no, notes…"
             className="input-base pl-10 pr-9 py-2 text-sm" />
           {searchParty && (
             <button onClick={() => setSearchParty("")}
@@ -534,10 +632,11 @@ export default function TransactionHistoryTable({ transactions, loading, error }
           {/* ── Desktop Table ── */}
           <div className="card overflow-hidden hidden md:block">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[780px]">
+              <table className="w-full min-w-[840px]">
                 <thead className="bg-slate-900/60 border-b border-slate-800/60">
                   <tr>
                     <th className="table-th">Date</th>
+                    <th className="table-th">Invoice #</th>
                     <th className="table-th">Party</th>
                     <th className="table-th">Type</th>
                     <th className="table-th text-right">Total</th>
@@ -548,63 +647,78 @@ export default function TransactionHistoryTable({ transactions, loading, error }
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((tx) => (
-                    <>
-                      <tr key={tx.id} className="table-row">
-                        <td className="table-td text-slate-400 text-sm">{formatDate(tx.transactionDate)}</td>
-                        <td className="table-td">
-                          <p className="text-slate-200 font-medium text-sm">{tx.partyName}</p>
-                          {(tx.paymentLogs?.length > 0) && (
-                            <p className="text-[10px] text-slate-600">
-                              {tx.paymentLogs.length} payment{tx.paymentLogs.length > 1 ? "s" : ""}
-                            </p>
-                          )}
-                          {tx.returnOfTxId && <p className="text-[10px] text-amber-600">↩ Return entry</p>}
-                        </td>
-                        <td className="table-td"><TypeBadge type={tx.type} /></td>
-                        <td className="table-td text-right text-slate-200 font-semibold num text-sm">{fmtINR(tx.totalAmount)}</td>
-                        <td className="table-td text-right text-emerald-400 num text-sm">{fmtINR(tx.amountPaid)}</td>
-                        <td className="table-td text-right num text-sm">
-                          <span className={tx.pendingDue > 0 ? "text-amber-400 font-semibold" : "text-slate-500"}>
-                            {fmtINR(tx.pendingDue)}
-                          </span>
-                        </td>
-                        <td className="table-td"><StatusBadge status={tx.status} /></td>
-                        <td className="table-td text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            {/* Details */}
-                            <button onClick={() => toggleExpand(tx.id)} className="btn-icon" title="View details">
-                              <Eye className="w-3.5 h-3.5" />
-                            </button>
-                            {/* Calendar / Edit Date */}
-                            <button onClick={() => setEditingDate(tx)} className="btn-icon" title="Edit date">
-                              <CalendarDays className="w-3.5 h-3.5" />
-                            </button>
-                            {/* Return */}
-                            {canReturn(tx) && (
-                              <button onClick={() => setReturning(tx)}
-                                className="p-2 rounded-lg text-amber-500 hover:text-amber-300 hover:bg-amber-500/10 transition-all duration-150"
-                                title="Record return">
-                                <RotateCcw className="w-3.5 h-3.5" />
-                              </button>
+                  {filtered.map((tx) => {
+                    const termsCount = getPaymentTerms(tx).length;
+                    return (
+                      <tbody key={tx.id}>
+                        <tr className="table-row">
+                          <td className="table-td text-slate-400 text-sm whitespace-nowrap">{formatDate(tx.transactionDate)}</td>
+                          <td className="table-td">
+                            {tx.invoiceNumber ? (
+                              <span className="inline-flex items-center gap-1 text-xs font-mono font-bold text-indigo-300 bg-indigo-500/15 px-2 py-0.5 rounded border border-indigo-500/30">
+                                <FileText className="w-3 h-3 text-indigo-400" />
+                                {tx.invoiceNumber}
+                              </span>
+                            ) : (
+                              <span className="text-slate-600 text-xs">—</span>
                             )}
-                            {/* Settle */}
-                            {tx.status === "Pending" && (
-                              <button onClick={() => setSettling(tx)}
-                                className="btn-emerald text-xs py-1.5 px-2.5">
-                                <CreditCard className="w-3 h-3" /> Settle
+                          </td>
+                          <td className="table-td cursor-pointer" onClick={() => toggleExpand(tx.id)}>
+                            <p className="text-slate-200 font-semibold text-sm hover:text-indigo-300 transition-colors">{tx.partyName}</p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              {termsCount > 0 && (
+                                <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-500/10 px-1.5 py-0.2 rounded">
+                                  {termsCount} term{termsCount > 1 ? "s" : ""}
+                                </span>
+                              )}
+                              {tx.returnOfTxId && <span className="text-[10px] text-amber-500">↩ Return</span>}
+                            </div>
+                          </td>
+                          <td className="table-td"><TypeBadge type={tx.type} /></td>
+                          <td className="table-td text-right text-slate-200 font-semibold num text-sm">{fmtINR(tx.totalAmount)}</td>
+                          <td className="table-td text-right text-emerald-400 num text-sm">{fmtINR(tx.amountPaid)}</td>
+                          <td className="table-td text-right num text-sm">
+                            <span className={tx.pendingDue > 0 ? "text-amber-400 font-semibold" : "text-slate-500"}>
+                              {fmtINR(tx.pendingDue)}
+                            </span>
+                          </td>
+                          <td className="table-td"><StatusBadge status={tx.status} /></td>
+                          <td className="table-td text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              {/* Details */}
+                              <button onClick={() => toggleExpand(tx.id)} className="btn-icon" title="View details">
+                                <Eye className="w-3.5 h-3.5" />
                               </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                      {expanded === tx.id && (
-                        <tr key={`${tx.id}-detail`}>
-                          <td colSpan={8} className="p-0"><DetailDrawer tx={tx} /></td>
+                              {/* Calendar / Edit Date */}
+                              <button onClick={() => setEditingDate(tx)} className="btn-icon" title="Edit date">
+                                <CalendarDays className="w-3.5 h-3.5" />
+                              </button>
+                              {/* Return */}
+                              {canReturn(tx) && (
+                                <button onClick={() => setReturning(tx)}
+                                  className="p-2 rounded-lg text-amber-500 hover:text-amber-300 hover:bg-amber-500/10 transition-all duration-150"
+                                  title="Record return">
+                                  <RotateCcw className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              {/* Settle */}
+                              {tx.status === "Pending" && (
+                                <button onClick={() => setSettling(tx)}
+                                  className="btn-emerald text-xs py-1.5 px-2.5">
+                                  <CreditCard className="w-3 h-3" /> Settle
+                                </button>
+                              )}
+                            </div>
+                          </td>
                         </tr>
-                      )}
-                    </>
-                  ))}
+                        {expanded === tx.id && (
+                          <tr key={`${tx.id}-detail`}>
+                            <td colSpan={9} className="p-0"><DetailDrawer tx={tx} /></td>
+                          </tr>
+                        )}
+                      </tbody>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -612,80 +726,123 @@ export default function TransactionHistoryTable({ transactions, loading, error }
 
           {/* ── Mobile Cards ── */}
           <div className="md:hidden space-y-3">
-            {filtered.map((tx) => (
-              <div key={tx.id} className="card overflow-hidden">
-                <div className="p-3.5 sm:p-4">
-                  <div className="flex items-start justify-between gap-2 mb-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-slate-200 font-semibold text-sm truncate">{tx.partyName}</p>
-                      <p className="text-slate-500 text-xs mt-0.5">{formatDate(tx.transactionDate)}</p>
-                      {tx.returnOfTxId && <p className="text-[10px] text-amber-500 mt-0.5">↩ Return entry</p>}
-                    </div>
-                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                      <TypeBadge type={tx.type} />
-                      <StatusBadge status={tx.status} />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-1.5 text-center mb-3">
-                    <div className="bg-slate-800/60 rounded-xl p-1.5 min-w-0">
-                      <p className="text-slate-500 text-[10px] uppercase tracking-wider truncate">Total</p>
-                      <p className="text-white font-bold text-xs num truncate">{fmtINR(tx.totalAmount)}</p>
-                    </div>
-                    <div className="bg-slate-800/60 rounded-xl p-1.5 min-w-0">
-                      <p className="text-slate-500 text-[10px] uppercase tracking-wider truncate">Paid</p>
-                      <p className="text-emerald-400 font-bold text-xs num truncate">{fmtINR(tx.amountPaid)}</p>
-                    </div>
-                    <div className="bg-slate-800/60 rounded-xl p-1.5 min-w-0">
-                      <p className="text-slate-500 text-[10px] uppercase tracking-wider truncate">Due</p>
-                      <p className={`font-bold text-xs num truncate ${tx.pendingDue > 0 ? "text-amber-400" : "text-slate-500"}`}>
-                        {fmtINR(tx.pendingDue)}
-                      </p>
-                    </div>
-                  </div>
-
-                  {tx.totalAmount > 0 && (
-                    <div className="mb-3">
-                      <div className="progress-track h-1">
-                        <div className="progress-fill bg-emerald-500"
-                          style={{ width: `${Math.min(100, Math.round((tx.amountPaid / tx.totalAmount) * 100))}%` }} />
+            {filtered.map((tx) => {
+              const termsCount = getPaymentTerms(tx).length;
+              return (
+                <div key={tx.id} className="card overflow-hidden border border-slate-800/80 hover:border-slate-700 transition-all">
+                  {/* Tap card body/header to toggle payment details */}
+                  <div
+                    onClick={() => toggleExpand(tx.id)}
+                    className="p-3.5 sm:p-4 cursor-pointer select-none active:bg-slate-800/40 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-slate-100 font-bold text-sm truncate">{tx.partyName}</p>
+                          {tx.invoiceNumber && (
+                            <span className="text-[11px] font-mono font-bold text-indigo-300 bg-indigo-500/15 px-2 py-0.5 rounded border border-indigo-500/30">
+                              #{tx.invoiceNumber}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                          <p className="text-slate-500 text-xs">{formatDate(tx.transactionDate)}</p>
+                          {termsCount > 0 && (
+                            <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                              💰 {termsCount} term{termsCount > 1 ? "s" : ""}
+                            </span>
+                          )}
+                          {tx.returnOfTxId && <span className="text-[10px] text-amber-500">↩ Return entry</span>}
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                        <TypeBadge type={tx.type} />
+                        <StatusBadge status={tx.status} />
                       </div>
                     </div>
-                  )}
 
-                  {/* Mobile action buttons */}
-                  <div className="flex gap-2">
-                    {/* Details */}
-                    <button onClick={() => toggleExpand(tx.id)}
-                      className="btn-secondary flex-1 text-xs py-2 gap-1.5">
-                      {expanded === tx.id ? <ChevronUp className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                      {expanded === tx.id ? "Hide" : "Details"}
-                    </button>
-                    {/* Calendar */}
-                    <button onClick={() => setEditingDate(tx)}
-                      className="btn-secondary text-xs py-2 px-3" title="Edit date">
-                      <CalendarDays className="w-3.5 h-3.5" />
-                    </button>
-                    {/* Return */}
-                    {canReturn(tx) && (
-                      <button onClick={() => setReturning(tx)}
-                        className="text-xs py-2 px-3 rounded-xl border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 transition-all"
-                        title="Record return">
-                        <RotateCcw className="w-3.5 h-3.5" />
-                      </button>
+                    {/* Tap hint */}
+                    <p className="text-[11px] text-indigo-400/90 font-medium mb-3 flex items-center gap-1">
+                      {expanded === tx.id ? (
+                        <span>▲ Tap card to hide details</span>
+                      ) : (
+                        <span>▼ Tap card to view payment terms & items</span>
+                      )}
+                    </p>
+
+                    <div className="grid grid-cols-3 gap-1.5 text-center mb-3">
+                      <div className="bg-slate-800/60 rounded-xl p-1.5 min-w-0">
+                        <p className="text-slate-500 text-[10px] uppercase tracking-wider truncate">Total</p>
+                        <p className="text-white font-bold text-xs num truncate">{fmtINR(tx.totalAmount)}</p>
+                      </div>
+                      <div className="bg-slate-800/60 rounded-xl p-1.5 min-w-0">
+                        <p className="text-slate-500 text-[10px] uppercase tracking-wider truncate">Paid</p>
+                        <p className="text-emerald-400 font-bold text-xs num truncate">{fmtINR(tx.amountPaid)}</p>
+                      </div>
+                      <div className="bg-slate-800/60 rounded-xl p-1.5 min-w-0">
+                        <p className="text-slate-500 text-[10px] uppercase tracking-wider truncate">Due</p>
+                        <p className={`font-bold text-xs num truncate ${tx.pendingDue > 0 ? "text-amber-400" : "text-slate-500"}`}>
+                          {fmtINR(tx.pendingDue)}
+                        </p>
+                      </div>
+                    </div>
+
+                    {tx.totalAmount > 0 && (
+                      <div className="mb-3">
+                        <div className="progress-track h-1">
+                          <div className="progress-fill bg-emerald-500"
+                            style={{ width: `${Math.min(100, Math.round((tx.amountPaid / tx.totalAmount) * 100))}%` }} />
+                        </div>
+                      </div>
                     )}
-                    {/* Settle */}
-                    {tx.status === "Pending" && (
-                      <button onClick={() => setSettling(tx)}
-                        className="btn-emerald flex-1 text-xs py-2">
-                        <CreditCard className="w-3 h-3" /> Settle
+
+                    {/* Mobile action buttons */}
+                    <div className="flex gap-2">
+                      {/* Details */}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleExpand(tx.id); }}
+                        className="btn-secondary flex-1 text-xs py-2 gap-1.5"
+                      >
+                        {expanded === tx.id ? <ChevronUp className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        {expanded === tx.id ? "Hide Details" : "View Details"}
                       </button>
-                    )}
+                      {/* Calendar */}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setEditingDate(tx); }}
+                        className="btn-secondary text-xs py-2 px-3" title="Edit date"
+                      >
+                        <CalendarDays className="w-3.5 h-3.5" />
+                      </button>
+                      {/* Return */}
+                      {canReturn(tx) && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setReturning(tx); }}
+                          className="text-xs py-2 px-3 rounded-xl border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 transition-all"
+                          title="Record return"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      {/* Settle */}
+                      {tx.status === "Pending" && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setSettling(tx); }}
+                          className="btn-emerald flex-1 text-xs py-2"
+                        >
+                          <CreditCard className="w-3 h-3" /> Settle
+                        </button>
+                      )}
+                    </div>
                   </div>
+
+                  {expanded === tx.id && (
+                    <div className="border-t border-slate-800 bg-slate-950/70">
+                      <DetailDrawer tx={tx} />
+                    </div>
+                  )}
                 </div>
-                {expanded === tx.id && <DetailDrawer tx={tx} />}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </>
       )}

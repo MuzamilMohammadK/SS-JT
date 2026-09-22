@@ -8,7 +8,7 @@ import {
 import {
   Plus, Trash2, Receipt, IndianRupee, ShoppingBag,
   ChevronDown, ChevronUp, Calculator, Users,
-  ArrowUpRight, ArrowDownLeft, RotateCcw,
+  ArrowUpRight, ArrowDownLeft, RotateCcw, FileText,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -18,6 +18,7 @@ const EMPTY_ROW = { sareeName: "", quantity: "", pricePerUnit: "" };
 function getInitialForm() {
   return {
     partyId:         "",
+    invoiceNumber:   "",
     type:            "Sale",
     sareeDetails:    [{ ...EMPTY_ROW }],
     gstRate:         "",
@@ -218,9 +219,17 @@ export default function LedgerEntryForm({ parties }) {
         subtotal:     Number(r.quantity) * Number(r.pricePerUnit),
       }));
 
+      const initialLogs = amountPaid > 0 ? [{
+        amount: amountPaid,
+        date: new Date(form.transactionDate + "T12:00:00").toISOString(),
+        type: form.type === "Sale" ? "Initial Receipt from Customer" : "Initial Payment to Supplier",
+        note: "Initial upfront payment",
+      }] : [];
+
       await addDoc(collection(db, "users", uid, "transactions"), {
         partyId:         form.partyId,
         partyName:       selectedParty?.name ?? "Unknown",
+        invoiceNumber:   form.invoiceNumber.trim(),
         type:            form.type,
         sareeDetails,
         subTotalAmount:  parseFloat(subTotal.toFixed(2)),
@@ -230,10 +239,11 @@ export default function LedgerEntryForm({ parties }) {
         amountPaid,
         pendingDue,
         status,
+        paymentLogs:     initialLogs,
         transactionDate: form.transactionDate,
         notes:           form.notes.trim(),
         createdAt:       serverTimestamp(),
-        settledAt:       null,
+        settledAt:       status === "Settled" ? serverTimestamp() : null,
       });
 
       toast.success(`Transaction recorded — ${fmtINR(totalAmount)} (${status})`);
@@ -264,8 +274,8 @@ export default function LedgerEntryForm({ parties }) {
           </div>
         </div>
 
-        {/* Party + Date row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Party + Invoice No. + Date row */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           {/* Party */}
           <div className="field">
             <label htmlFor="le-party" className="label flex items-center gap-1">
@@ -281,6 +291,16 @@ export default function LedgerEntryForm({ parties }) {
               ))}
             </select>
             {errors.partyId && <p className="text-rose-400 text-xs">{errors.partyId}</p>}
+          </div>
+
+          {/* Invoice Number */}
+          <div className="field">
+            <label htmlFor="le-invoice" className="label flex items-center gap-1">
+              <FileText className="w-3 h-3 text-indigo-400" /> Invoice Number
+            </label>
+            <input id="le-invoice" type="text" value={form.invoiceNumber}
+              onChange={setTop("invoiceNumber")} placeholder="e.g. INV-2026-001"
+              className="input-base" />
           </div>
 
           {/* Date */}

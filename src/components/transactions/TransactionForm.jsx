@@ -5,7 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import { validatePositive } from "../../utils/validators";
 import {
   Plus, Trash2, Receipt, IndianRupee, ShoppingBag,
-  ChevronDown, ChevronUp, ArrowUpRight, ArrowDownLeft, RotateCcw,
+  ChevronDown, ChevronUp, ArrowUpRight, ArrowDownLeft, RotateCcw, FileText,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -15,6 +15,7 @@ const EMPTY_ROW = { sareeName: "", quantity: "", pricePerUnit: "" };
 function getInitialForm() {
   return {
     partyId:         "",
+    invoiceNumber:   "",
     type:            "Sale",
     sareeDetails:    [{ ...EMPTY_ROW }],
     amountPaid:      "",
@@ -144,17 +145,29 @@ export default function TransactionForm({ parties }) {
         lineTotal:    parseFloat(r.quantity) * parseFloat(r.pricePerUnit),
       }));
 
+      const partyObj = parties.find((p) => p.id === form.partyId);
+      const initialLogs = amountPaidNum > 0 ? [{
+        amount: amountPaidNum,
+        date: new Date(form.transactionDate + "T12:00:00").toISOString(),
+        type: form.type === "Sale" ? "Initial Receipt from Customer" : "Initial Payment to Supplier",
+        note: "Initial upfront payment",
+      }] : [];
+
       await addDoc(collection(db, "users", currentUser.uid, "transactions"), {
         partyId:         form.partyId,
+        partyName:       partyObj?.name ?? "Unknown",
+        invoiceNumber:   form.invoiceNumber.trim(),
         type:            form.type,
         sareeDetails,
         totalAmount,
         amountPaid:      amountPaidNum,
         pendingDue,
+        paymentLogs:     initialLogs,
         transactionDate: form.transactionDate,
         status:          pendingDue <= 0 ? "Settled" : "Pending",
         notes:           form.notes.trim(),
         createdAt:       serverTimestamp(),
+        settledAt:       pendingDue <= 0 ? serverTimestamp() : null,
       });
 
       toast.success("Transaction recorded successfully!");
@@ -183,8 +196,8 @@ export default function TransactionForm({ parties }) {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6" noValidate>
-        {/* Row 1: Party + Type + Date */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Row 1: Party + Invoice No. + Date */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           {/* Party select */}
           <div className="field">
             <label htmlFor="tx-party" className="label">Party</label>
@@ -197,34 +210,14 @@ export default function TransactionForm({ parties }) {
             {formErrors.partyId && <p className="text-rose-400 text-xs">{formErrors.partyId}</p>}
           </div>
 
-          {/* Transaction Type — 2×2 card grid */}
+          {/* Invoice Number */}
           <div className="field">
-            <label className="label">Transaction Type</label>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { value: "Sale",            label: "Sale",            sub: "Sold to customer",         Icon: ArrowUpRight,  cls: "indigo" },
-                { value: "Purchase",        label: "Purchase",        sub: "Received from supplier",   Icon: ArrowDownLeft, cls: "rose"   },
-                { value: "Sale Return",     label: "Sale Return",     sub: "Customer returned sarees", Icon: RotateCcw,     cls: "amber"  },
-                { value: "Purchase Return", label: "Purchase Return", sub: "Returned to supplier",     Icon: RotateCcw,     cls: "teal"   },
-              ].map(({ value, label, sub, Icon, cls }) => (
-                <button key={value} type="button"
-                  onClick={() => setForm((f) => ({ ...f, type: value }))}
-                  className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all duration-200 ${
-                    form.type === value
-                      ? cls === "indigo" ? "bg-indigo-500/20 border-indigo-500/50 text-indigo-300"
-                      : cls === "rose"   ? "bg-rose-500/20 border-rose-500/50 text-rose-300"
-                      : cls === "amber"  ? "bg-amber-500/20 border-amber-500/50 text-amber-300"
-                      :                    "bg-teal-500/20 border-teal-500/50 text-teal-300"
-                      : "bg-slate-800/50 border-slate-700/60 text-slate-500 hover:text-slate-300"
-                  }`}>
-                  <Icon className="w-4 h-4 flex-shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold leading-tight">{label}</p>
-                    <p className="text-[10px] opacity-70 truncate mt-0.5">{sub}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
+            <label htmlFor="tx-invoice" className="label flex items-center gap-1">
+              <FileText className="w-3 h-3 text-indigo-400" /> Invoice Number
+            </label>
+            <input id="tx-invoice" type="text" value={form.invoiceNumber}
+              onChange={(e) => setForm((f) => ({ ...f, invoiceNumber: e.target.value }))}
+              placeholder="e.g. INV-2026-001" className="input-base" />
           </div>
 
           {/* Date */}
@@ -233,6 +226,37 @@ export default function TransactionForm({ parties }) {
             <input id="tx-date" type="date" value={form.transactionDate}
               onChange={(e) => setForm((f) => ({ ...f, transactionDate: e.target.value }))}
               className={`input-base ${formErrors.transactionDate ? "input-error" : ""}`} />
+            {formErrors.transactionDate && <p className="text-rose-400 text-xs">{formErrors.transactionDate}</p>}
+          </div>
+        </div>
+
+        {/* Row 2: Transaction Type */}
+        <div className="field">
+          <label className="label">Transaction Type</label>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {[
+              { value: "Sale",            label: "Sale",            sub: "Sold to customer",         Icon: ArrowUpRight,  cls: "indigo" },
+              { value: "Purchase",        label: "Purchase",        sub: "Received from supplier",   Icon: ArrowDownLeft, cls: "rose"   },
+              { value: "Sale Return",     label: "Sale Return",     sub: "Customer returned sarees", Icon: RotateCcw,     cls: "amber"  },
+              { value: "Purchase Return", label: "Purchase Return", sub: "Returned to supplier",     Icon: RotateCcw,     cls: "teal"   },
+            ].map(({ value, label, sub, Icon, cls }) => (
+              <button key={value} type="button"
+                onClick={() => setForm((f) => ({ ...f, type: value }))}
+                className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all duration-200 ${
+                  form.type === value
+                    ? cls === "indigo" ? "bg-indigo-500/20 border-indigo-500/50 text-indigo-300"
+                    : cls === "rose"   ? "bg-rose-500/20 border-rose-500/50 text-rose-300"
+                    : cls === "amber"  ? "bg-amber-500/20 border-amber-500/50 text-amber-300"
+                    :                    "bg-teal-500/20 border-teal-500/50 text-teal-300"
+                    : "bg-slate-800/50 border-slate-700/60 text-slate-500 hover:text-slate-300"
+                }`}>
+                <Icon className="w-4 h-4 flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs font-bold leading-tight">{label}</p>
+                  <p className="text-[10px] opacity-70 truncate mt-0.5">{sub}</p>
+                </div>
+              </button>
+            ))}
           </div>
         </div>
 
