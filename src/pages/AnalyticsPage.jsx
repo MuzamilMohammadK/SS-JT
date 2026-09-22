@@ -26,16 +26,18 @@ function StatPill({ label, value, color = "indigo" }) {
 
 export default function AnalyticsPage() {
   const { currentUser } = useAuth();
-  const { transactions, loading: txLoading, error: txError } = useTransactions(currentUser?.uid);
-  const { parties,      loading: pLoading  }                 = useParties(currentUser?.uid);
+  const { transactions = [], loading: txLoading, error: txError } = useTransactions(currentUser?.uid);
+  const { parties = [],      loading: pLoading,  error: pError }   = useParties(currentUser?.uid);
 
   const loading = txLoading || pLoading;
+  const error   = txError || pError;
 
   const stats = useMemo(() => {
-    const total       = transactions.length;
-    const pending     = transactions.filter((t) => t.status === "Pending").length;
-    const settled     = transactions.filter((t) => t.status === "Settled").length;
-    const totalVolume = transactions.reduce((s, t) => s + (t.totalAmount || 0), 0);
+    const list        = transactions || [];
+    const total       = list.length;
+    const pending     = list.filter((t) => t.status === "Pending").length;
+    const settled     = list.filter((t) => t.status === "Settled").length;
+    const totalVolume = list.reduce((s, t) => s + (Number(t.totalAmount) || 0), 0);
     return { total, pending, settled, totalVolume };
   }, [transactions]);
 
@@ -59,9 +61,9 @@ export default function AnalyticsPage() {
           <div className="flex items-center justify-center py-16 text-slate-500">
             <Loader2 className="w-5 h-5 animate-spin mr-3" /> Loading analytics…
           </div>
-        ) : txError ? (
+        ) : error ? (
           <div className="alert-error">
-            <AlertCircle className="w-4 h-4 flex-shrink-0" />{txError}
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />{error}
           </div>
         ) : (
           <div className="space-y-6">

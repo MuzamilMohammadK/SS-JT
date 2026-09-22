@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { fmtINR } from "../../utils/validators";
 import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownLeft, Scale } from "lucide-react";
 
-export default function ReceivablePayableBar({ transactions }) {
+export default function ReceivablePayableBar({ transactions = [] }) {
   const stats = useMemo(() => {
     let totalAR = 0, paidAR = 0, totalAP = 0, paidAP = 0;
 

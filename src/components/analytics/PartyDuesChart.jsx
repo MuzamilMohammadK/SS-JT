@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { fmtINR } from "../../utils/validators";
 import { Users, ArrowUpRight, ArrowDownLeft, CheckCircle2 } from "lucide-react";
 
-export default function PartyDuesChart({ transactions, parties }) {
+export default function PartyDuesChart({ transactions = [], parties = [] }) {
   // Build per-party pending-due totals
   const partyDues = useMemo(() => {
     const map = {};
@@ -81,7 +81,7 @@ export default function PartyDuesChart({ transactions, parties }) {
                   </div>
                 </div>
                 <span className={`font-bold text-sm num flex-shrink-0 ${
-                  isGiven ? "text-indigo-300" : "text-rose-300"
+                  isSale ? "text-indigo-300" : "text-rose-300"
                 }`}>
                   {fmtINR(item.pendingDue)}
                 </span>
@@ -91,7 +91,7 @@ export default function PartyDuesChart({ transactions, parties }) {
               <div className="pl-11 pr-0">
                 <div className="progress-track h-1.5">
                   <div
-                    className={`progress-fill ${isGiven ? "bg-indigo-500" : "bg-rose-500"}`}
+                    className={`progress-fill ${isSale ? "bg-indigo-500" : "bg-rose-500"}`}
                     style={{ width: `${widthPct}%` }}
                   />
                 </div>

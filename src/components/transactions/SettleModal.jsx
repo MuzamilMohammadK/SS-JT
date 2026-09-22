@@ -34,6 +34,7 @@ export default function SettleModal({ transaction: tx, onClose }) {
   if (!tx) return null;
 
   const isPurchase   = tx.type === "Purchase" || tx.type === "Taken" || tx.type === "Purchase Return";
+  const isTaken      = isPurchase;
   const existingLogs = tx.paymentLogs || [];
 
   // Safely parse numerical values regardless of whether Firestore returned strings or numbers
@@ -199,7 +200,7 @@ export default function SettleModal({ transaction: tx, onClose }) {
             <label htmlFor="settle-amount" className="label flex items-center justify-between">
               <span className="flex items-center gap-1">
                 <IndianRupee className="w-3 h-3" />
-                {isTaken ? "Amount Being Paid to Supplier (₹)" : "Amount Received from Customer (₹)"}
+                {isPurchase ? "Amount Being Paid to Supplier (₹)" : "Amount Received from Customer (₹)"}
               </span>
               {maxAllowed > 0 && (
                 <button
@@ -287,7 +288,7 @@ export default function SettleModal({ transaction: tx, onClose }) {
               {loading ? <span className="spinner" /> : <CreditCard className="w-4 h-4" />}
               {loading
                 ? "Saving…"
-                : isTaken
+                : isPurchase
                   ? "Record Supplier Payment"
                   : "Record Customer Payment"}
             </button>
