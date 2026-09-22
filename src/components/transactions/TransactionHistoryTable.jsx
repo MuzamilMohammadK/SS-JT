@@ -7,7 +7,7 @@ import {
   Search, X, BookOpen, ArrowUpRight, ArrowDownLeft,
   CheckCircle2, Clock, ChevronUp, Eye, CreditCard,
   Loader2, AlertCircle, CalendarDays, RotateCcw, FileText,
-  IndianRupee,
+  IndianRupee, Pencil, Plus, Trash2, Minus,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -561,13 +561,297 @@ function InlineSettleView({ tx, uid, onDone }) {
   );
 }
 
-// ── Detail Drawer (Contains all 4 inline subviews) ─────────────
+// ── Inline Edit Sarees / Add Items Subview (No pop-up) ─────────
+function InlineEditItemsView({ tx, uid, onDone }) {
+  const initialItems = (tx.sareeDetails && tx.sareeDetails.length > 0)
+    ? tx.sareeDetails.map((it) => ({
+        sareeName: it.sareeName || "",
+        quantity: it.quantity ?? 1,
+        pricePerUnit: it.pricePerUnit ?? "",
+      }))
+    : [{ sareeName: "", quantity: 1, pricePerUnit: "" }];
+
+  const [items,   setItems]   = useState(initialItems);
+  const [loading, setLoading] = useState(false);
+
+  const updateItem = (index, field, val) => {
+    const updated = [...items];
+    updated[index] = { ...updated[index], [field]: val };
+    setItems(updated);
+  };
+
+  const incrementQty = (index) => {
+    const cur = Number(items[index].quantity) || 0;
+    updateItem(index, "quantity", cur + 1);
+  };
+
+  const decrementQty = (index) => {
+    const cur = Number(items[index].quantity) || 1;
+    if (cur > 1) {
+      updateItem(index, "quantity", cur - 1);
+    }
+  };
+
+  const addItemRow = () => {
+    setItems([...items, { sareeName: "", quantity: 1, pricePerUnit: "" }]);
+  };
+
+  const removeItemRow = (index) => {
+    if (items.length <= 1) return;
+    setItems(items.filter((_, i) => i !== index));
+  };
+
+  // Calculations
+  const totalSareesCount = items.reduce((sum, it) => sum + (Number(it.quantity) || 0), 0);
+  const newSubtotal = items.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.pricePerUnit) || 0), 0);
+  const gstRate = Number(tx.gstRate) || 0;
+  const newGst = gstRate > 0 ? parseFloat((newSubtotal * (gstRate / 100)).toFixed(2)) : 0;
+  const newTotal = parseFloat((newSubtotal + newGst).toFixed(2));
+  const paidSoFar = Number(tx.amountPaid) || 0;
+  const newDue = parseFloat(Math.max(0, newTotal - paidSoFar).toFixed(2));
+
+  const handleSave = async () => {
+    // Validate
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (!it.sareeName.trim()) {
+        toast.error(`Please enter a name for saree item #${i + 1}.`);
+        return;
+      }
+      if (!it.quantity || Number(it.quantity) <= 0) {
+        toast.error(`Enter a valid quantity (> 0) for saree item #${i + 1}.`);
+        return;
+      }
+      if (it.pricePerUnit === "" || isNaN(Number(it.pricePerUnit)) || Number(it.pricePerUnit) < 0) {
+        toast.error(`Enter a valid price (>= 0) for saree item #${i + 1}.`);
+        return;
+      }
+    }
+
+    if (!uid) { toast.error("Session expired."); return; }
+    setLoading(true);
+
+    try {
+      const sareeDetails = items.map((it) => ({
+        sareeName:    it.sareeName.trim(),
+        quantity:     Number(it.quantity),
+        pricePerUnit: Number(it.pricePerUnit),
+        subtotal:     parseFloat((Number(it.quantity) * Number(it.pricePerUnit)).toFixed(2)),
+      }));
+
+      const isFullySettled = newDue <= 0.005;
+
+      await updateDoc(doc(db, "users", uid, "transactions", tx.id), {
+        sareeDetails,
+        subTotalAmount: parseFloat(newSubtotal.toFixed(2)),
+        gstAmount:      newGst,
+        totalAmount:    newTotal,
+        pendingDue:     newDue,
+        status:         isFullySettled ? "Settled" : "Pending",
+        settledAt:      isFullySettled ? (tx.settledAt || serverTimestamp()) : null,
+      });
+
+      toast.success("Saree counts & items updated successfully.");
+      onDone();
+    } catch (err) {
+      toast.error("Failed to update saree items.");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl bg-slate-900/90 border border-indigo-500/25 p-4 space-y-4 animate-fade-in">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-indigo-500/15 flex items-center justify-center flex-shrink-0">
+            <Pencil className="w-4 h-4 text-indigo-400" />
+          </div>
+          <div>
+            <h4 className="text-slate-100 font-bold text-sm">Edit Sarees & Add Items</h4>
+            <p className="text-slate-500 text-xs">{tx.partyName} · Adjust counts or add new sarees</p>
+          </div>
+        </div>
+        <span className="text-xs font-bold text-indigo-300 bg-indigo-500/15 px-2.5 py-1 rounded-lg border border-indigo-500/30">
+          {totalSareesCount} {totalSareesCount === 1 ? "Saree" : "Sarees"} Total
+        </span>
+      </div>
+
+      {/* Saree rows */}
+      <div className="space-y-3">
+        {items.map((item, idx) => {
+          const itemSub = (Number(item.quantity) || 0) * (Number(item.pricePerUnit) || 0);
+          return (
+            <div key={idx} className="rounded-xl bg-slate-800/60 border border-slate-700/50 p-3 space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded">
+                  #{idx + 1} Saree Item
+                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold num text-slate-300">
+                    Subtotal: <strong className="text-white">{fmtINR(itemSub)}</strong>
+                  </span>
+                  {items.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeItemRow(idx)}
+                      className="p-1 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded transition-colors"
+                      title="Remove item"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Saree Name */}
+              <div>
+                <label className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">
+                  Saree Name / Description
+                </label>
+                <input
+                  type="text"
+                  value={item.sareeName}
+                  onChange={(e) => updateItem(idx, "sareeName", e.target.value)}
+                  placeholder="e.g. Kanchipuram Silk, Banarasi, Cotton…"
+                  className="input-base py-1.5 text-xs sm:text-sm mt-0.5"
+                />
+              </div>
+
+              {/* Quantity Count & Price per unit */}
+              <div className="grid grid-cols-2 gap-2">
+                {/* Count stepper */}
+                <div>
+                  <label className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">
+                    Count / Quantity
+                  </label>
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => decrementQty(idx)}
+                      disabled={Number(item.quantity) <= 1}
+                      className="w-8 h-8 rounded-lg bg-slate-700/80 hover:bg-slate-700 text-slate-300 flex items-center justify-center flex-shrink-0 disabled:opacity-40"
+                    >
+                      <Minus className="w-3.5 h-3.5" />
+                    </button>
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={item.quantity}
+                      onChange={(e) => updateItem(idx, "quantity", e.target.value)}
+                      className="input-base py-1 text-center font-bold text-sm min-w-0"
+                      style={{ fontSize: "16px" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => incrementQty(idx)}
+                      className="w-8 h-8 rounded-lg bg-slate-700/80 hover:bg-slate-700 text-slate-300 flex items-center justify-center flex-shrink-0"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Price per unit */}
+                <div>
+                  <label className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">
+                    Price / Unit (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={item.pricePerUnit}
+                    onChange={(e) => updateItem(idx, "pricePerUnit", e.target.value)}
+                    placeholder="0.00"
+                    className="input-base py-1.5 text-sm mt-0.5 num"
+                    style={{ fontSize: "16px" }}
+                  />
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Add New Saree Item Button */}
+      <button
+        type="button"
+        onClick={addItemRow}
+        className="w-full py-2.5 px-3 rounded-xl border border-dashed border-indigo-500/40 bg-indigo-500/5 hover:bg-indigo-500/10 text-indigo-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all"
+      >
+        <Plus className="w-4 h-4 text-indigo-400" />
+        <span>+ Add Another Saree / Item</span>
+      </button>
+
+      {/* Live Financial Breakdown Summary */}
+      <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3 space-y-1.5 text-xs">
+        <div className="flex justify-between items-center text-slate-400">
+          <span>Total Saree Count:</span>
+          <span className="text-white font-bold">{totalSareesCount} pcs</span>
+        </div>
+        <div className="flex justify-between items-center text-slate-400">
+          <span>Subtotal Amount:</span>
+          <span className="text-slate-200 font-semibold num">{fmtINR(newSubtotal)}</span>
+        </div>
+        {gstRate > 0 && (
+          <div className="flex justify-between items-center text-slate-400">
+            <span>GST ({gstRate}%):</span>
+            <span className="text-slate-200 font-semibold num">{fmtINR(newGst)}</span>
+          </div>
+        )}
+        <div className="flex justify-between items-center border-t border-slate-800 pt-1.5 font-bold text-sm">
+          <span className="text-white">New Total Amount:</span>
+          <span className="text-white num">{fmtINR(newTotal)}</span>
+        </div>
+        <div className="flex justify-between items-center text-slate-400">
+          <span>Paid So Far:</span>
+          <span className="text-emerald-400 font-semibold num">{fmtINR(paidSoFar)}</span>
+        </div>
+        <div className="flex justify-between items-center border-t border-slate-800/80 pt-1 font-semibold">
+          <span className="text-slate-300">Remaining Balance:</span>
+          <span className={`num ${newDue > 0 ? "text-amber-400" : "text-emerald-400"}`}>
+            {newDue > 0 ? fmtINR(newDue) : "✅ Fully Settled"}
+          </span>
+        </div>
+      </div>
+
+      {/* Buttons */}
+      <div className="flex gap-2.5 pt-1">
+        <button
+          type="button"
+          onClick={onDone}
+          className="btn-secondary flex-1 text-xs"
+          style={{ minHeight: "44px" }}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={loading || items.length === 0}
+          onClick={handleSave}
+          className="btn-primary flex-1 text-xs"
+          style={{ minHeight: "44px" }}
+        >
+          {loading ? <span className="spinner" /> : <Pencil className="w-4 h-4" />}
+          {loading ? "Saving Changes…" : "Save Sarees & Totals"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Detail Drawer (Contains all inline subviews) ───────────────
 function DetailDrawer({ tx, uid, activeTab = "details", onTabChange, onClose }) {
   const terms = getPaymentTerms(tx);
   const total = Number(tx.totalAmount) || 0;
   const paid  = Number(tx.amountPaid) || 0;
   const due   = Number(tx.pendingDue) || 0;
   const pct   = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
+  const totalSarees = (tx.sareeDetails || []).reduce((sum, s) => sum + (Number(s.quantity) || 0), 0);
 
   return (
     <div className="px-3.5 pb-4 sm:px-4 animate-slide-up">
@@ -585,6 +869,11 @@ function DetailDrawer({ tx, uid, activeTab = "details", onTabChange, onClose }) 
                 {tx.invoiceNumber && (
                   <span className="text-xs font-mono font-bold text-indigo-300 bg-indigo-500/20 px-2 py-0.5 rounded border border-indigo-500/30">
                     Invoice #{tx.invoiceNumber}
+                  </span>
+                )}
+                {totalSarees > 0 && (
+                  <span className="text-[11px] font-semibold text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700/50">
+                    🏷️ {totalSarees} sarees
                   </span>
                 )}
               </div>
@@ -609,6 +898,18 @@ function DetailDrawer({ tx, uid, activeTab = "details", onTabChange, onClose }) 
             }`}
           >
             <Eye className="w-3.5 h-3.5" /> Details & Terms
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onTabChange("editItems")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all flex-shrink-0 ${
+              activeTab === "editItems"
+                ? "bg-indigo-600 text-white shadow-sm"
+                : "text-indigo-300 hover:text-indigo-200 hover:bg-indigo-500/15"
+            }`}
+          >
+            <Pencil className="w-3.5 h-3.5" /> Edit Sarees / Add Items
           </button>
 
           <button
@@ -732,9 +1033,22 @@ function DetailDrawer({ tx, uid, activeTab = "details", onTabChange, onClose }) 
               </div>
             </div>
 
-            {/* Saree items */}
+            {/* Saree items with Edit Sarees / Add Items Button */}
             <div>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Saree Items</p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  Saree Items ({totalSarees} total count)
+                </p>
+                <button
+                  type="button"
+                  onClick={() => onTabChange("editItems")}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/25 transition-all"
+                >
+                  <Pencil className="w-3 h-3 text-indigo-400" />
+                  <span>Edit Count / Add Items</span>
+                </button>
+              </div>
+
               <div className="space-y-1.5">
                 {(tx.sareeDetails || []).map((item, i) => (
                   <div key={i} className="flex items-center justify-between text-sm gap-2 bg-slate-900/50 p-2.5 rounded-xl border border-slate-800/60">
@@ -778,17 +1092,22 @@ function DetailDrawer({ tx, uid, activeTab = "details", onTabChange, onClose }) 
           </div>
         )}
 
-        {/* ── Subview 2: Change Date Inline ── */}
+        {/* ── Subview 2: Edit Sarees Count & Add Items Inline ── */}
+        {activeTab === "editItems" && (
+          <InlineEditItemsView tx={tx} uid={uid} onDone={() => onTabChange("details")} />
+        )}
+
+        {/* ── Subview 3: Change Date Inline ── */}
         {activeTab === "calendar" && (
           <InlineCalendarView tx={tx} uid={uid} onDone={() => onTabChange("details")} />
         )}
 
-        {/* ── Subview 3: Return Sarees Inline ── */}
+        {/* ── Subview 4: Return Sarees Inline ── */}
         {activeTab === "return" && (
           <InlineReturnView tx={tx} uid={uid} onDone={() => onTabChange("details")} />
         )}
 
-        {/* ── Subview 4: Settle Due Payment Inline ── */}
+        {/* ── Subview 5: Settle Due Payment Inline ── */}
         {activeTab === "settle" && (
           <InlineSettleView tx={tx} uid={uid} onDone={() => onTabChange("details")} />
         )}
@@ -807,7 +1126,7 @@ export default function TransactionHistoryTable({ transactions, loading, error }
   const [searchParty,  setSearchParty]  = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
 
-  // Inline expansion state: id = transaction ID, tab = "details" | "calendar" | "return" | "settle"
+  // Inline expansion state: id = transaction ID, tab = "details" | "editItems" | "calendar" | "return" | "settle"
   const [expandedId,   setExpandedId]   = useState(null);
   const [expandedTab,  setExpandedTab]  = useState("details");
 
@@ -960,6 +1279,7 @@ export default function TransactionHistoryTable({ transactions, loading, error }
                 </thead>
                 {filtered.map((tx) => {
                   const termsCount = getPaymentTerms(tx).length;
+                  const totalSarees = (tx.sareeDetails || []).reduce((sum, s) => sum + (Number(s.quantity) || 0), 0);
                   const isExpanded = expandedId === tx.id;
                   return (
                     <tbody key={tx.id}>
@@ -977,7 +1297,12 @@ export default function TransactionHistoryTable({ transactions, loading, error }
                         </td>
                         <td className="table-td cursor-pointer" onClick={() => handleAction(tx.id, "details")}>
                           <p className="text-slate-200 font-semibold text-sm hover:text-indigo-300 transition-colors">{tx.partyName}</p>
-                          <div className="flex items-center gap-2 mt-0.5">
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                            {totalSarees > 0 && (
+                              <span className="text-[10px] text-indigo-300 font-semibold bg-indigo-500/10 px-1.5 py-0.2 rounded">
+                                {totalSarees} sarees
+                              </span>
+                            )}
                             {termsCount > 0 && (
                               <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-500/10 px-1.5 py-0.2 rounded">
                                 {termsCount} term{termsCount > 1 ? "s" : ""}
@@ -1005,6 +1330,15 @@ export default function TransactionHistoryTable({ transactions, loading, error }
                               title="View details & terms"
                             >
                               <Eye className="w-3.5 h-3.5" />
+                            </button>
+                            {/* Edit Sarees / Add Items Button with Pencil */}
+                            <button
+                              type="button"
+                              onClick={() => handleAction(tx.id, "editItems")}
+                              className={`btn-icon ${isExpanded && expandedTab === "editItems" ? "text-indigo-400 bg-indigo-500/20" : ""}`}
+                              title="Edit sarees count / Add items"
+                            >
+                              <Pencil className="w-3.5 h-3.5 text-indigo-400" />
                             </button>
                             {/* Calendar Button */}
                             <button
@@ -1067,10 +1401,11 @@ export default function TransactionHistoryTable({ transactions, loading, error }
           <div className="md:hidden space-y-3">
             {filtered.map((tx) => {
               const termsCount = getPaymentTerms(tx).length;
+              const totalSarees = (tx.sareeDetails || []).reduce((sum, s) => sum + (Number(s.quantity) || 0), 0);
               const isExpanded = expandedId === tx.id;
               return (
                 <div key={tx.id} className="card overflow-hidden border border-slate-800/80 hover:border-slate-700 transition-all">
-                  {/* Tap card body/header to toggle payment details */}
+                  {/* Tap card body/header to toggle details */}
                   <div
                     onClick={() => handleAction(tx.id, "details")}
                     className="p-3.5 sm:p-4 cursor-pointer select-none active:bg-slate-800/40 transition-colors"
@@ -1087,6 +1422,11 @@ export default function TransactionHistoryTable({ transactions, loading, error }
                         </div>
                         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                           <p className="text-slate-500 text-xs">{formatDate(tx.transactionDate)}</p>
+                          {totalSarees > 0 && (
+                            <span className="text-[10px] text-indigo-300 font-semibold bg-indigo-500/10 px-1.5 py-0.5 rounded">
+                              🏷️ {totalSarees} sarees
+                            </span>
+                          )}
                           {termsCount > 0 && (
                             <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded">
                               💰 {termsCount} term{termsCount > 1 ? "s" : ""}
@@ -1095,9 +1435,27 @@ export default function TransactionHistoryTable({ transactions, loading, error }
                           {tx.returnOfTxId && <span className="text-[10px] text-amber-500">↩ Return entry</span>}
                         </div>
                       </div>
-                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                        <TypeBadge type={tx.type} />
-                        <StatusBadge status={tx.status} />
+
+                      {/* Top Corner: Badges + Pencil Edit Button */}
+                      <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                        <div className="flex items-center gap-1">
+                          <TypeBadge type={tx.type} />
+                          <StatusBadge status={tx.status} />
+                        </div>
+                        {/* Pencil Edit button in the top corner! */}
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleAction(tx.id, "editItems"); }}
+                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+                            isExpanded && expandedTab === "editItems"
+                              ? "bg-indigo-600 text-white shadow-sm ring-1 ring-indigo-400"
+                              : "bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/25 active:scale-95"
+                          }`}
+                          title="Edit sarees count / Add items"
+                        >
+                          <Pencil className="w-3 h-3 text-indigo-400" />
+                          <span>Edit / Add Items</span>
+                        </button>
                       </div>
                     </div>
 
@@ -1136,7 +1494,7 @@ export default function TransactionHistoryTable({ transactions, loading, error }
                       </div>
                     )}
 
-                    {/* Mobile action buttons: Directly expand inside the card */}
+                    {/* Mobile action buttons */}
                     <div className="flex gap-2">
                       {/* Details */}
                       <button
@@ -1148,6 +1506,17 @@ export default function TransactionHistoryTable({ transactions, loading, error }
                       >
                         {isExpanded && expandedTab === "details" ? <ChevronUp className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                         {isExpanded && expandedTab === "details" ? "Hide" : "Details"}
+                      </button>
+                      {/* Edit Sarees Pencil button */}
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleAction(tx.id, "editItems"); }}
+                        className={`btn-secondary text-xs py-2 px-3 ${
+                          isExpanded && expandedTab === "editItems" ? "bg-indigo-600 border-indigo-500 text-white" : ""
+                        }`}
+                        title="Edit sarees count / Add items"
+                      >
+                        <Pencil className="w-3.5 h-3.5 text-indigo-400" />
                       </button>
                       {/* Calendar */}
                       <button
