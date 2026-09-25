@@ -41,7 +41,7 @@ export default function Navbar() {
           {/* ── Brand ── */}
           <div className="flex items-center gap-2.5">
             <div className="flex items-center justify-center w-9 h-9 md:w-11 md:h-11 rounded-xl overflow-hidden shadow-lg shadow-indigo-500/20 border border-white/10">
-              <img src="/Gemini_Generated_Image_8yctlx8yctlx8yct.png" alt="Shivaayaha Logo" className="w-full h-full object-cover" />
+              <img src="/logo_2.jpg" alt="Shivaayaha Logo" className="w-full h-full object-cover" />
             </div>
             <div className="leading-tight">
               <p className="text-white font-bold text-sm md:text-[15px] tracking-wide">

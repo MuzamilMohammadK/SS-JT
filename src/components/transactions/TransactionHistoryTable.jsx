@@ -70,6 +70,14 @@ function getPaymentTerms(tx) {
       amount: Number(log.amount) || 0,
       type: log.type || "Settlement Payment",
       isInitial: false,
+      // payment mode fields
+      paymentMode: log.paymentMode || null,
+      paymentDate: log.paymentDate || null,
+      chequeNo: log.chequeNo || null,
+      chequeReceivedDate: log.chequeReceivedDate || null,
+      chequeDate: log.chequeDate || null,
+      chequePassDate: log.chequePassDate || null,
+      neftRefNo: log.neftRefNo || null,
     });
   });
 
@@ -348,9 +356,28 @@ function InlineReturnView({ tx, uid, onDone }) {
 // ── Inline Settle Subview (No pop-up) ──────────────────────────
 function InlineSettleView({ tx, uid, onDone }) {
   const isPurchase = tx.type === "Purchase" || tx.type === "Taken" || tx.type === "Purchase Return";
+
+  // ── amount & validation
   const [amount, setAmount] = useState("");
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  // ── payment mode: "cash" | "cheque" | "neft"
+  const [payMode, setPayMode] = useState("cash");
+
+  // ── cash fields
+  const todayStr = () => new Date().toISOString().split("T")[0];
+  const [cashDate, setCashDate] = useState(todayStr());
+
+  // ── cheque fields
+  const [chequeNo, setChequeNo]           = useState("");
+  const [chequeReceivedDate, setChequeReceivedDate] = useState(todayStr());
+  const [chequeDate, setChequeDate]       = useState("");   // date written on cheque
+  const [chequePassDate, setChequePassDate] = useState(""); // cheque cleared / pass date
+
+  // ── NEFT fields
+  const [neftRef, setNeftRef]     = useState("");
+  const [neftDate, setNeftDate]   = useState(todayStr());
 
   const currentPaid = Number(tx.amountPaid) || 0;
   const currentTotal = Number(tx.totalAmount) || 0;
@@ -369,6 +396,8 @@ function InlineSettleView({ tx, uid, onDone }) {
     if (maxAllowed > 0 && n > maxAllowed + 0.005) {
       return `Cannot exceed the pending balance of ${fmtINR(maxAllowed)}.`;
     }
+    if (payMode === "cheque" && !chequeNo.trim()) return "Please enter the cheque number.";
+    if (payMode === "cheque" && !chequeDate) return "Please enter the date written on the cheque.";
     return null;
   };
 
@@ -385,10 +414,31 @@ function InlineSettleView({ tx, uid, onDone }) {
       const newDue = parseFloat(Math.max(0, currentDue - paid).toFixed(2));
       const isFullySettled = newDue <= 0.005;
 
+      // Build mode-specific details
+      let modeDetails = {};
+      if (payMode === "cash") {
+        modeDetails = { paymentMode: "Cash", paymentDate: cashDate };
+      } else if (payMode === "cheque") {
+        modeDetails = {
+          paymentMode: "Cheque",
+          chequeNo: chequeNo.trim(),
+          chequeReceivedDate,
+          chequeDate,
+          chequePassDate: chequePassDate || null,
+        };
+      } else if (payMode === "neft") {
+        modeDetails = {
+          paymentMode: "NEFT",
+          neftRefNo: neftRef.trim(),
+          paymentDate: neftDate,
+        };
+      }
+
       const logEntry = {
         amount: paid,
         date: new Date().toISOString(),
         type: isPurchase ? "Payment to Supplier" : "Receipt from Customer",
+        ...modeDetails,
       };
 
       await updateDoc(doc(db, "users", uid, "transactions", tx.id), {
@@ -418,8 +468,13 @@ function InlineSettleView({ tx, uid, onDone }) {
     setError(null);
   };
 
+  // Shared input style helpers
+  const fieldCls = "input-base text-xs";
+  const labelCls = "label text-xs mb-1";
+
   return (
     <div className="rounded-2xl bg-slate-900/90 border border-emerald-500/25 p-4 space-y-4 animate-fade-in">
+      {/* Header */}
       <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-3">
         <div className="flex items-center gap-2.5">
           <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
@@ -537,6 +592,133 @@ function InlineSettleView({ tx, uid, onDone }) {
         )}
       </div>
 
+      {/* ── Payment Mode Selector ── */}
+      <div className="field">
+        <label className="label text-xs mb-2 block">Payment Mode</label>
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { key: "cash",   icon: "💵", label: "Cash" },
+            { key: "cheque", icon: "🏦", label: "Cheque" },
+            { key: "neft",   icon: "⚡", label: "NEFT" },
+          ].map(({ key, icon, label }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => { setPayMode(key); setError(null); }}
+              className={`flex flex-col items-center gap-1 py-2.5 px-2 rounded-xl border text-xs font-semibold transition-all ${
+                payMode === key
+                  ? "bg-emerald-500/20 border-emerald-500/60 text-emerald-300 shadow-sm shadow-emerald-500/20"
+                  : "bg-slate-800/60 border-slate-700/40 text-slate-400 hover:border-slate-600 hover:text-slate-300"
+              }`}
+            >
+              <span className="text-base">{icon}</span>
+              <span>{label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Cash Fields ── */}
+      {payMode === "cash" && (
+        <div className="field">
+          <label className={labelCls}>Payment Date</label>
+          <input
+            type="date"
+            value={cashDate}
+            onChange={(e) => setCashDate(e.target.value)}
+            className={fieldCls}
+          />
+        </div>
+      )}
+
+      {/* ── Cheque Fields ── */}
+      {payMode === "cheque" && (
+        <div className="space-y-3 rounded-xl bg-slate-800/40 border border-slate-700/40 p-3">
+          <p className="text-[10px] text-slate-500 uppercase font-semibold tracking-wider">Cheque Details</p>
+
+          {/* Cheque Number */}
+          <div className="field">
+            <label className={labelCls}>Cheque Number <span className="text-rose-400">*</span></label>
+            <input
+              type="text"
+              value={chequeNo}
+              onChange={(e) => { setChequeNo(e.target.value); setError(null); }}
+              placeholder="e.g. 004521"
+              className={fieldCls}
+            />
+          </div>
+
+          {/* 3 date fields in a grid */}
+          <div className="grid grid-cols-1 gap-3">
+            <div className="field">
+              <label className={labelCls}>
+                📅 Cheque Received Date <span className="text-rose-400">*</span>
+              </label>
+              <input
+                type="date"
+                value={chequeReceivedDate}
+                onChange={(e) => setChequeReceivedDate(e.target.value)}
+                className={fieldCls}
+              />
+              <p className="text-[10px] text-slate-500 mt-0.5">Date you received the cheque</p>
+            </div>
+
+            <div className="field">
+              <label className={labelCls}>
+                🗓️ Cheque Date (Date Written on Cheque) <span className="text-rose-400">*</span>
+              </label>
+              <input
+                type="date"
+                value={chequeDate}
+                onChange={(e) => { setChequeDate(e.target.value); setError(null); }}
+                className={fieldCls}
+              />
+              <p className="text-[10px] text-slate-500 mt-0.5">Date printed / written on the cheque</p>
+            </div>
+
+            <div className="field">
+              <label className={labelCls}>✅ Cheque Pass Date (Cleared)</label>
+              <input
+                type="date"
+                value={chequePassDate}
+                onChange={(e) => setChequePassDate(e.target.value)}
+                className={fieldCls}
+              />
+              <p className="text-[10px] text-slate-500 mt-0.5">Date cheque was cleared by bank (optional)</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── NEFT Fields ── */}
+      {payMode === "neft" && (
+        <div className="space-y-3 rounded-xl bg-slate-800/40 border border-slate-700/40 p-3">
+          <p className="text-[10px] text-slate-500 uppercase font-semibold tracking-wider">NEFT / Online Transfer Details</p>
+
+          <div className="field">
+            <label className={labelCls}>Transaction / UTR Reference No.</label>
+            <input
+              type="text"
+              value={neftRef}
+              onChange={(e) => setNeftRef(e.target.value)}
+              placeholder="e.g. UTIB026547893021"
+              className={fieldCls}
+            />
+          </div>
+
+          <div className="field">
+            <label className={labelCls}>Transfer Date</label>
+            <input
+              type="date"
+              value={neftDate}
+              onChange={(e) => setNeftDate(e.target.value)}
+              className={fieldCls}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Action buttons */}
       <div className="flex gap-2.5 pt-1">
         <button
           type="button"
@@ -1002,7 +1184,42 @@ function DetailDrawer({ tx, uid, activeTab = "details", onTabChange, onClose }) 
                             <span className="text-slate-100 font-semibold text-xs">{term.title}</span>
                             <span className="text-slate-500 text-[11px]">📅 {formatDate(term.date)}</span>
                           </div>
-                          <p className="text-slate-400 text-[11px] truncate">{term.type}</p>
+                          <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                            <p className="text-slate-400 text-[11px]">{term.type}</p>
+                            {term.paymentMode && !term.isInitial && (() => {
+                              const modeMap = {
+                                Cash:   { icon: "💵", cls: "bg-emerald-500/15 border-emerald-500/30 text-emerald-300" },
+                                Cheque: { icon: "🏦", cls: "bg-blue-500/15 border-blue-500/30 text-blue-300" },
+                                NEFT:   { icon: "⚡", cls: "bg-violet-500/15 border-violet-500/30 text-violet-300" },
+                              };
+                              const m = modeMap[term.paymentMode] || { icon: "💳", cls: "bg-slate-700/40 border-slate-600/30 text-slate-300" };
+                              return (
+                                <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-semibold ${m.cls}`}>
+                                  {m.icon} {term.paymentMode}
+                                  {term.paymentMode === "Cheque" && term.chequeNo && (
+                                    <span className="opacity-70">#{term.chequeNo}</span>
+                                  )}
+                                  {term.paymentMode === "NEFT" && term.neftRefNo && (
+                                    <span className="opacity-70 font-mono">{term.neftRefNo}</span>
+                                  )}
+                                </span>
+                              );
+                            })()}
+                          </div>
+                          {/* Cheque extra dates */}
+                          {term.paymentMode === "Cheque" && !term.isInitial && (
+                            <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
+                              {term.chequeReceivedDate && (
+                                <span className="text-[10px] text-slate-500">Rcvd: <span className="text-slate-400">{formatDate(term.chequeReceivedDate)}</span></span>
+                              )}
+                              {term.chequeDate && (
+                                <span className="text-[10px] text-slate-500">Chq Date: <span className="text-slate-400">{formatDate(term.chequeDate)}</span></span>
+                              )}
+                              {term.chequePassDate && (
+                                <span className="text-[10px] text-emerald-600">✅ Cleared: <span className="text-emerald-500">{formatDate(term.chequePassDate)}</span></span>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
 
