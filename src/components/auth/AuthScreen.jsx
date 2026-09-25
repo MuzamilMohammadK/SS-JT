@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { validateEmail, validatePassword, firebaseAuthError } from "../../utils/validators";
-import { Gem, Mail, Lock, Eye, EyeOff, AlertCircle, Loader2, UserPlus, LogIn } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, AlertCircle, Loader2, UserPlus, LogIn } from "lucide-react";
 import toast from "react-hot-toast";
 
 
@@ -226,8 +226,8 @@ export default function AuthScreen() {
       <div className="w-full max-w-sm animate-slide-up">
         {/* Brand Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-purple-700 shadow-2xl shadow-indigo-500/30 mb-5 animate-glow-pulse">
-            <Gem className="w-8 h-8 text-white" />
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl overflow-hidden shadow-2xl shadow-indigo-500/30 mb-5 animate-glow-pulse border border-white/10">
+            <img src="/logo_2.jpg" alt="Shivaayaha Logo" className="w-full h-full object-cover" />
           </div>
           <h1 className="text-xl font-bold text-white tracking-tight">
             Shivaayaha Silks &amp; Jari Trades
