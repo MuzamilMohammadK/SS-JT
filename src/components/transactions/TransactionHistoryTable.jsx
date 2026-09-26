@@ -754,6 +754,7 @@ function InlineEditItemsView({ tx, uid, onDone }) {
     : [{ sareeName: "", quantity: 1, pricePerUnit: "" }];
 
   const [items,   setItems]   = useState(initialItems);
+  const [gstRate, setGstRate] = useState(String(Number(tx.gstRate) || 0));
   const [loading, setLoading] = useState(false);
 
   const updateItem = (index, field, val) => {
@@ -786,8 +787,8 @@ function InlineEditItemsView({ tx, uid, onDone }) {
   // Calculations
   const totalSareesCount = items.reduce((sum, it) => sum + (Number(it.quantity) || 0), 0);
   const newSubtotal = items.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.pricePerUnit) || 0), 0);
-  const gstRate = Number(tx.gstRate) || 0;
-  const newGst = gstRate > 0 ? parseFloat((newSubtotal * (gstRate / 100)).toFixed(2)) : 0;
+  const gstRateNum = Math.max(0, Number(gstRate) || 0);
+  const newGst = gstRateNum > 0 ? parseFloat((newSubtotal * (gstRateNum / 100)).toFixed(2)) : 0;
   const newTotal = parseFloat((newSubtotal + newGst).toFixed(2));
   const paidSoFar = Number(tx.amountPaid) || 0;
   const newDue = parseFloat(Math.max(0, newTotal - paidSoFar).toFixed(2));
@@ -826,6 +827,7 @@ function InlineEditItemsView({ tx, uid, onDone }) {
       await updateDoc(doc(db, "users", uid, "transactions", tx.id), {
         sareeDetails,
         subTotalAmount: parseFloat(newSubtotal.toFixed(2)),
+        gstRate:        gstRateNum,
         gstAmount:      newGst,
         totalAmount:    newTotal,
         pendingDue:     newDue,
@@ -969,6 +971,62 @@ function InlineEditItemsView({ tx, uid, onDone }) {
         <span>+ Add Another Saree / Item</span>
       </button>
 
+      {/* GST Rate Field */}
+      <div className="rounded-xl bg-slate-800/40 border border-slate-700/40 p-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">
+            GST Rate (%) — Add if forgotten
+          </p>
+          {Number(tx.gstRate) === 0 && (
+            <span className="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/25 px-1.5 py-0.5 rounded font-semibold">
+              Not set on original
+            </span>
+          )}
+        </div>
+        {/* Quick GST preset buttons */}
+        <div className="flex gap-1.5 flex-wrap">
+          {[0, 5, 12, 18, 28].map((rate) => (
+            <button
+              key={rate}
+              type="button"
+              onClick={() => setGstRate(String(rate))}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all ${
+                Number(gstRate) === rate
+                  ? "bg-indigo-500/25 border-indigo-500/60 text-indigo-300"
+                  : "bg-slate-800/60 border-slate-700/40 text-slate-400 hover:border-slate-600 hover:text-slate-300"
+              }`}
+            >
+              {rate === 0 ? "No GST" : `${rate}%`}
+            </button>
+          ))}
+        </div>
+        {/* Custom GST input */}
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min="0"
+            max="100"
+            step="0.01"
+            value={gstRate}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (val === "" || (/^\d*\.?\d*$/.test(val) && Number(val) <= 100)) {
+                setGstRate(val);
+              }
+            }}
+            placeholder="0"
+            className="input-base py-1.5 text-sm num flex-1"
+            style={{ fontSize: "16px" }}
+          />
+          <span className="text-slate-400 text-sm font-semibold flex-shrink-0">%</span>
+        </div>
+        {gstRateNum > 0 && (
+          <p className="text-[10px] text-indigo-300">
+            GST of {gstRateNum}% = {fmtINR(newGst)} will be added to subtotal.
+          </p>
+        )}
+      </div>
+
       {/* Live Financial Breakdown Summary */}
       <div className="rounded-xl bg-slate-950/70 border border-slate-800 p-3 space-y-1.5 text-xs">
         <div className="flex justify-between items-center text-slate-400">
@@ -979,10 +1037,10 @@ function InlineEditItemsView({ tx, uid, onDone }) {
           <span>Subtotal Amount:</span>
           <span className="text-slate-200 font-semibold num">{fmtINR(newSubtotal)}</span>
         </div>
-        {gstRate > 0 && (
+        {gstRateNum > 0 && (
           <div className="flex justify-between items-center text-slate-400">
-            <span>GST ({gstRate}%):</span>
-            <span className="text-slate-200 font-semibold num">{fmtINR(newGst)}</span>
+            <span>GST ({gstRateNum}%):</span>
+            <span className="text-indigo-300 font-semibold num">{fmtINR(newGst)}</span>
           </div>
         )}
         <div className="flex justify-between items-center border-t border-slate-800 pt-1.5 font-bold text-sm">
