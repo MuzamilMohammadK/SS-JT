@@ -758,6 +758,9 @@ function InlineEditItemsView({ tx, uid, parties = [], onDone }) {
   const [gstRate, setGstRate] = useState(String(Number(tx.gstRate) || 0));
   const [loading, setLoading] = useState(false);
 
+  // Transaction type state (Sale vs Purchase)
+  const [txType, setTxType] = useState(isPurchase(tx.type) ? "Purchase" : "Sale");
+
   // Party selection & custom name state
   const initialMatchedParty = (parties || []).find(
     (p) => p.id === tx.partyId || (tx.partyName && p.name.trim().toLowerCase() === tx.partyName.trim().toLowerCase())
@@ -857,6 +860,7 @@ function InlineEditItemsView({ tx, uid, parties = [], onDone }) {
       const finalPartyId = matchedParty ? matchedParty.id : (isCustomParty ? null : (selectedPartyId || null));
 
       await updateDoc(doc(db, "users", uid, "transactions", tx.id), {
+        type:           txType,
         partyId:        finalPartyId,
         partyName:      finalPartyName,
         sareeDetails,
@@ -869,7 +873,7 @@ function InlineEditItemsView({ tx, uid, parties = [], onDone }) {
         settledAt:      isFullySettled ? (tx.settledAt || serverTimestamp()) : null,
       });
 
-      toast.success("Party name, sarees & totals updated successfully.");
+      toast.success(`Transaction updated to ${txType}, party name & sarees.`);
       onDone();
     } catch (err) {
       toast.error("Failed to update saree items.");
@@ -889,12 +893,53 @@ function InlineEditItemsView({ tx, uid, parties = [], onDone }) {
           </div>
           <div>
             <h4 className="text-slate-100 font-bold text-sm">Edit Sarees &amp; Party Name</h4>
-            <p className="text-slate-500 text-xs">{partyName || tx.partyName} · Adjust party, counts, or items</p>
+            <p className="text-slate-500 text-xs">
+              {txType} · {partyName || tx.partyName} · Adjust type, party, counts, or items
+            </p>
           </div>
         </div>
         <span className="text-xs font-bold text-indigo-300 bg-indigo-500/15 px-2.5 py-1 rounded-lg border border-indigo-500/30">
           {totalSareesCount} {totalSareesCount === 1 ? "Saree" : "Sarees"} Total
         </span>
+      </div>
+
+      {/* ── Transaction Type Selector (Sale vs Purchase) ── */}
+      <div className="rounded-xl bg-slate-800/60 border border-slate-700/60 p-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+            <span>Transaction Type</span>
+          </label>
+          <span className="text-[10px] text-slate-400">
+            Switch if mistakenly entered as {txType === "Sale" ? "Purchase" : "Sale"}
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setTxType("Sale")}
+            className={`flex items-center justify-center gap-2 py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
+              txType === "Sale"
+                ? "bg-indigo-600/30 border-indigo-500 text-indigo-300 shadow-sm ring-1 ring-indigo-500/50"
+                : "bg-slate-900/60 border-slate-700/40 text-slate-400 hover:text-slate-200 hover:bg-slate-800/80"
+            }`}
+          >
+            <ArrowUpRight className="w-4 h-4 text-indigo-400" />
+            <span>Sale (Customer)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setTxType("Purchase")}
+            className={`flex items-center justify-center gap-2 py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
+              txType === "Purchase"
+                ? "bg-rose-500/25 border-rose-500 text-rose-300 shadow-sm ring-1 ring-rose-500/50"
+                : "bg-slate-900/60 border-slate-700/40 text-slate-400 hover:text-slate-200 hover:bg-slate-800/80"
+            }`}
+          >
+            <ArrowDownLeft className="w-4 h-4 text-rose-400" />
+            <span>Purchase (Supplier)</span>
+          </button>
+        </div>
       </div>
 
       {/* ── Party Edit Section ── */}
@@ -953,11 +998,23 @@ function InlineEditItemsView({ tx, uid, parties = [], onDone }) {
             >
               <option value="">— Select registered party —</option>
               {parties && parties.length > 0 ? (
-                parties.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({p.category === "Customer" ? "Customer" : "Supplier"})
-                  </option>
-                ))
+                parties
+                  .slice()
+                  .sort((a, b) => {
+                    const targetCategory = txType === "Sale" ? "Customer" : "Supplier";
+                    const aMatches = a.category === targetCategory ? 0 : 1;
+                    const bMatches = b.category === targetCategory ? 0 : 1;
+                    if (aMatches !== bMatches) return aMatches - bMatches;
+                    return (a.name || "").localeCompare(b.name || "");
+                  })
+                  .map((p) => {
+                    const isTarget = (txType === "Sale" && p.category === "Customer") || (txType === "Purchase" && p.category === "Supplier");
+                    return (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.category === "Customer" ? "Customer" : "Supplier"}){isTarget ? " ★" : ""}
+                      </option>
+                    );
+                  })
               ) : (
                 <option value="" disabled>No registered parties found</option>
               )}
