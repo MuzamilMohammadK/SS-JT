@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import { AuthProvider } from "./context/AuthContext";
+import { PinProvider } from "./context/PinContext";
 import ProtectedRoute from "./components/layout/ProtectedRoute";
 
 // Pages
@@ -32,6 +33,7 @@ const TOAST_STYLE = {
 export default function App() {
   return (
     <AuthProvider>
+      <PinProvider>
       <BrowserRouter>
         <PWARegistrar />
         <Toaster
@@ -60,6 +62,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/parties" replace />} />
         </Routes>
       </BrowserRouter>
+      </PinProvider>
     </AuthProvider>
   );
 }

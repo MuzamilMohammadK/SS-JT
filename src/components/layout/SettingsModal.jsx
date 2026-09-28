@@ -29,13 +29,23 @@ import {
   Info,
   Trash2,
   AlertTriangle,
+  Shield,
+  Delete,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { usePin } from "../../context/PinContext";
 
 export default function SettingsModal({ isOpen, onClose }) {
   const { currentUser, logout, refreshUser } = useAuth();
+  const { hasPin, savePin, removePin, resetVerification } = usePin();
 
-  const [activeTab, setActiveTab] = useState("email"); // 'email' | 'password'
+  const [activeTab, setActiveTab] = useState("email"); // 'email' | 'password' | 'security' | 'reset'
+
+  // ── PIN form state ────────────────────────────────────────────
+  const [pinStep, setPinStep]           = useState("menu"); // 'menu' | 'set' | 'remove'
+  const [newPin, setNewPin]             = useState("");
+  const [confirmPin, setConfirmPin]     = useState("");
+  const [pinError, setPinError]         = useState("");
 
   // Email form state
   const [newEmail, setNewEmail] = useState("");
@@ -83,6 +93,10 @@ export default function SettingsModal({ isOpen, onClose }) {
       setPasswordError("");
       setResetConfirmInput("");
       setResetError("");
+      setPinStep("menu");
+      setNewPin("");
+      setConfirmPin("");
+      setPinError("");
     }
   }, [isOpen]);
 
@@ -147,11 +161,38 @@ export default function SettingsModal({ isOpen, onClose }) {
   const handleLogout = async () => {
     try {
       onClose();
+      resetVerification();
       await logout();
       toast.success("Logged out successfully.");
     } catch {
       toast.error("Failed to log out. Please try again.");
     }
+  };
+
+  // ── Handle PIN save ───────────────────────────────────────────
+  const handleSavePin = (e) => {
+    e.preventDefault();
+    setPinError("");
+    if (!/^\d{4}$/.test(newPin)) {
+      setPinError("PIN must be exactly 4 digits.");
+      return;
+    }
+    if (newPin !== confirmPin) {
+      setPinError("PINs do not match. Please try again.");
+      return;
+    }
+    savePin(newPin);
+    toast.success("Security PIN set successfully!");
+    setNewPin("");
+    setConfirmPin("");
+    setPinStep("menu");
+  };
+
+  // ── Handle PIN remove ─────────────────────────────────────────
+  const handleRemovePin = () => {
+    removePin();
+    toast.success("Security PIN removed.");
+    setPinStep("menu");
   };
 
   // ── Handle Change Email ───────────────────────────────────────
@@ -380,6 +421,25 @@ export default function SettingsModal({ isOpen, onClose }) {
           >
             <KeyRound className="w-3.5 h-3.5" />
             <span>Password</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab("security");
+              setPinStep("menu");
+              setPinError("");
+              setNewPin("");
+              setConfirmPin("");
+            }}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+              activeTab === "security"
+                ? "bg-violet-600 text-white shadow-sm"
+                : "text-violet-400/90 hover:text-violet-300 hover:bg-violet-500/10"
+            }`}
+          >
+            <Shield className="w-3.5 h-3.5" />
+            <span>PIN</span>
           </button>
 
           <button
@@ -843,6 +903,144 @@ export default function SettingsModal({ isOpen, onClose }) {
               </button>
             </div>
           </form>
+        )}
+
+        {/* ── Tab 4: Security PIN ── */}
+        {activeTab === "security" && (
+          <div className="space-y-4 animate-fade-in">
+            {/* Header */}
+            <div className="p-4 rounded-2xl bg-violet-500/10 border border-violet-500/25 flex flex-col items-center text-center">
+              <div className="w-12 h-12 rounded-2xl bg-violet-500/20 text-violet-400 flex items-center justify-center mb-3 shadow-inner">
+                <Shield className="w-6 h-6" />
+              </div>
+              <h3 className="text-slate-100 font-bold text-sm mb-1">Security PIN</h3>
+              <p className="text-slate-400 text-xs max-w-xs">
+                {hasPin
+                  ? "A 4-digit PIN is active. You'll be asked for it every time you open the app."
+                  : "Set a 4-digit PIN to add an extra layer of protection when opening the app."}
+              </p>
+            </div>
+
+            {/* Status badge */}
+            <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold ${
+              hasPin
+                ? "bg-emerald-500/10 border border-emerald-500/25 text-emerald-400"
+                : "bg-slate-800/50 border border-slate-700/50 text-slate-400"
+            }`}>
+              <ShieldCheck className="w-4 h-4 flex-shrink-0" />
+              <span>{hasPin ? "PIN protection is ON" : "PIN protection is OFF"}</span>
+            </div>
+
+            {/* Menu state */}
+            {pinStep === "menu" && (
+              <div className="space-y-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => { setPinStep("set"); setPinError(""); setNewPin(""); setConfirmPin(""); }}
+                  className="btn-primary w-full text-xs py-2.5 flex items-center justify-center gap-2"
+                >
+                  <Shield className="w-3.5 h-3.5" />
+                  <span>{hasPin ? "Change PIN" : "Set PIN"}</span>
+                </button>
+                {hasPin && (
+                  <button
+                    type="button"
+                    onClick={handleRemovePin}
+                    className="w-full text-xs py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 hover:border-rose-500/40 text-rose-400 hover:text-rose-300 font-semibold transition-all flex items-center justify-center gap-2"
+                  >
+                    <Delete className="w-3.5 h-3.5" />
+                    <span>Remove PIN</span>
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Set PIN form */}
+            {pinStep === "set" && (
+              <form onSubmit={handleSavePin} className="space-y-4 animate-fade-in" noValidate>
+                {/* PIN digit boxes */}
+                <div>
+                  <label htmlFor="pin-new" className="label text-[11px]">
+                    New PIN (4 digits)
+                  </label>
+                  <input
+                    id="pin-new"
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={4}
+                    value={newPin}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/\D/g, "").slice(0, 4);
+                      setNewPin(v);
+                      if (pinError) setPinError("");
+                    }}
+                    placeholder="Enter 4-digit PIN"
+                    className="input-base text-sm text-center tracking-[0.5em] font-mono"
+                    autoFocus
+                  />
+                  {/* Visual dots */}
+                  <div className="flex items-center justify-center gap-4 mt-2">
+                    {[0,1,2,3].map(i => (
+                      <div key={i} className={`w-3 h-3 rounded-full border-2 transition-all ${
+                        newPin.length > i ? "bg-violet-500 border-violet-500" : "bg-transparent border-slate-600"
+                      }`} />
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label htmlFor="pin-confirm" className="label text-[11px]">
+                    Confirm PIN
+                  </label>
+                  <input
+                    id="pin-confirm"
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={4}
+                    value={confirmPin}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/\D/g, "").slice(0, 4);
+                      setConfirmPin(v);
+                      if (pinError) setPinError("");
+                    }}
+                    placeholder="Re-enter 4-digit PIN"
+                    className="input-base text-sm text-center tracking-[0.5em] font-mono"
+                  />
+                  <div className="flex items-center justify-center gap-4 mt-2">
+                    {[0,1,2,3].map(i => (
+                      <div key={i} className={`w-3 h-3 rounded-full border-2 transition-all ${
+                        confirmPin.length > i ? "bg-violet-500 border-violet-500" : "bg-transparent border-slate-600"
+                      }`} />
+                    ))}
+                  </div>
+                </div>
+
+                {pinError && (
+                  <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
+                    <span>{pinError}</span>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-2.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => { setPinStep("menu"); setPinError(""); setNewPin(""); setConfirmPin(""); }}
+                    className="btn-secondary text-xs px-4 py-2"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={newPin.length < 4 || confirmPin.length < 4}
+                    className="btn-primary text-xs px-4 py-2 flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Save PIN</span>
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
         )}
 
         {/* ── Danger Zone: Reset All Data (Quick Action) ── */}
