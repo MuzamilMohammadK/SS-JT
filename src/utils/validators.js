@@ -90,3 +90,24 @@ export function firebaseAuthError(code) {
   };
   return map[code] ?? `Authentication error (${code}). Please try again.`;
 }
+
+/**
+ * Normalizes an invoice number:
+ * - Trims whitespace.
+ * - For pure numeric strings (e.g., "001", "01", "1"), strips leading zeros (safe for "0" -> "0").
+ * - For alphanumeric strings (e.g., "INV-0042"), strips leading zeros from numeric segment ("INV-42").
+ */
+export function normalizeInvoiceNumber(inv) {
+  if (!inv && inv !== 0) return "";
+  const str = String(inv).trim();
+  if (!str) return "";
+
+  // Pure digits: "001", "01", "1" -> "1"; "000", "0" -> "0"
+  if (/^\d+$/.test(str)) {
+    return str.replace(/^0+/, "") || "0";
+  }
+
+  // Alphanumeric with leading zeros in numeric segments (e.g., "INV-001" -> "INV-1")
+  return str.replace(/(^|[^0-9])0+(\d+)/g, "$1$2");
+}
+

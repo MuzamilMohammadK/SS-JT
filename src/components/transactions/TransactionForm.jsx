@@ -3,7 +3,7 @@ import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../../services/firebase";
 import { useAuth } from "../../context/AuthContext";
 import { useTransactions } from "../../hooks/useTransactions";
-import { validatePositive } from "../../utils/validators";
+import { validatePositive, normalizeInvoiceNumber } from "../../utils/validators";
 import {
   Plus, Trash2, Receipt, IndianRupee, ShoppingBag,
   ChevronDown, ChevronUp, ArrowUpRight, ArrowDownLeft, RotateCcw, FileText,
@@ -95,14 +95,29 @@ export default function TransactionForm({ parties }) {
   const [loading,   setLoading]   = useState(false);
   const [showItems, setShowItems] = useState(true);
 
-  // Check if invoice number already exists
-  const trimmedInvoice = form.invoiceNumber.trim().toLowerCase();
+  // Normalized invoice number (strips leading zeros: "001" -> "1")
+  const normalizedInvoice = normalizeInvoiceNumber(form.invoiceNumber);
+
+  // Check if invoice number already exists:
+  // - Sales: must be unique across all Sales
+  // - Purchases: can be shared between different suppliers, only duplicate if from the SAME supplier
   const existingInvoiceTx = useMemo(() => {
-    if (!trimmedInvoice) return null;
-    return transactions.find(
-      (tx) => tx.invoiceNumber && tx.invoiceNumber.trim().toLowerCase() === trimmedInvoice
-    );
-  }, [transactions, trimmedInvoice]);
+    if (!normalizedInvoice) return null;
+    return transactions.find((tx) => {
+      const txNormalized = normalizeInvoiceNumber(tx.invoiceNumber);
+      if (txNormalized !== normalizedInvoice) return false;
+
+      if (form.type === "Sale") {
+        return tx.type === "Sale";
+      }
+
+      if (form.type === "Purchase") {
+        return tx.type === "Purchase" && form.partyId && tx.partyId === form.partyId;
+      }
+
+      return false;
+    });
+  }, [transactions, normalizedInvoice, form.type, form.partyId]);
 
   // ── Computed ─────────────────────────────────────────────
   const totalAmount = form.sareeDetails.reduce((sum, r) => {
@@ -180,10 +195,11 @@ export default function TransactionForm({ parties }) {
       }] : [];
 
       await addDoc(collection(db, "users", currentUser.uid, "transactions"), {
-        partyId:         form.partyId,
-        partyName:       partyObj?.name ?? "Unknown",
-        invoiceNumber:   form.invoiceNumber.trim(),
-        type:            form.type,
+        partyId:           form.partyId,
+        partyName:         partyObj?.name ?? "Unknown",
+        invoiceNumber:     form.invoiceNumber.trim(),
+        normalizedInvoice: normalizedInvoice,
+        type:              form.type,
         sareeDetails,
         totalAmount,
         amountPaid:      amountPaidNum,

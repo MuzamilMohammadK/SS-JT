@@ -1,11 +1,12 @@
 import { NavLink } from "react-router-dom";
-import { Users, Receipt, BookOpen, BarChart3 } from "lucide-react";
+import { Users, Receipt, BookOpen, BarChart3, Building2 } from "lucide-react";
 
 const NAV_ITEMS = [
-  { to: "/parties",   icon: Users,     label: "Parties"  },
-  { to: "/ledger",    icon: Receipt,   label: "Ledger"   },
-  { to: "/history",   icon: BookOpen,  label: "History"  },
-  { to: "/analytics", icon: BarChart3, label: "Analytics"},
+  { to: "/parties",            icon: Users,     label: "Parties"   },
+  { to: "/registered-parties", icon: Building2, label: "Directory" },
+  { to: "/ledger",             icon: Receipt,   label: "Ledger"    },
+  { to: "/history",            icon: BookOpen,  label: "History"   },
+  { to: "/analytics",          icon: BarChart3, label: "Analytics" },
 ];
 
 export default function BottomNav() {

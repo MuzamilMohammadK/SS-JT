@@ -66,7 +66,6 @@ function TypeBadge({ type }) {
 
 // ── Party Card ────────────────────────────────────────────────
 function PartyCard({ party, onEdit, onDelete }) {
-  // Fix: if single-word name, use first 2 characters instead of just 1
   const words = party.name.trim().split(/\s+/);
   const initials =
     words.length > 1
@@ -82,44 +81,81 @@ function PartyCard({ party, onEdit, onDelete }) {
       ? "from-indigo-600 to-purple-600"
       : "from-rose-600 to-pink-600";
 
+  const allMobiles = party.mobiles?.length
+    ? party.mobiles
+    : party.mobile
+    ? [party.mobile]
+    : [];
+
+  const addressText = [
+    party.address,
+    party.city,
+    party.state,
+    party.pincode ? `- ${party.pincode}` : "",
+  ]
+    .filter(Boolean)
+    .join(", ");
+
   return (
-    <div className="card p-4 flex items-center gap-4 hover:border-slate-700/80 transition-all duration-200 group">
-      {/* Avatar */}
-      <div
-        className={`flex-shrink-0 w-11 h-11 rounded-xl bg-gradient-to-br ${avatarColor} flex items-center justify-center text-white font-bold text-sm shadow-lg`}
-      >
-        {initials}
-      </div>
+    <div className="card p-4 flex flex-col justify-between gap-3 hover:border-slate-700/80 transition-all duration-200 group">
+      <div className="flex items-start gap-4">
+        {/* Avatar */}
+        <div
+          className={`flex-shrink-0 w-11 h-11 rounded-xl bg-gradient-to-br ${avatarColor} flex items-center justify-center text-white font-bold text-sm shadow-lg`}
+        >
+          {initials}
+        </div>
 
-      {/* Info */}
-      <div className="flex-1 min-w-0">
-        <p className="text-slate-100 font-semibold text-sm truncate">{party.name}</p>
-        <div className="flex items-center gap-1.5 mt-0.5">
-          <Phone className="w-3 h-3 text-slate-600 flex-shrink-0" />
-          <p className="text-slate-500 text-xs font-medium">{party.mobile || "—"}</p>
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-slate-100 font-semibold text-sm truncate">{party.name}</p>
+            <TypeBadge type={party.type} />
+          </div>
+
+          {/* Multiple Mobile Numbers */}
+          {allMobiles.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+              {allMobiles.map((mob, idx) => (
+                <a
+                  key={idx}
+                  href={`tel:${mob}`}
+                  className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-indigo-300 bg-slate-800/80 px-2 py-0.5 rounded-md border border-slate-700/50 transition-colors"
+                >
+                  <Phone className="w-2.5 h-2.5 text-slate-500" />
+                  <span>{mob}</span>
+                </a>
+              ))}
+            </div>
+          ) : (
+            <p className="text-slate-600 text-xs mt-1">—</p>
+          )}
+
+          {/* Address Details */}
+          {addressText && (
+            <p className="text-slate-400 text-xs mt-1.5 line-clamp-2">
+              📍 {addressText}
+            </p>
+          )}
         </div>
       </div>
 
-      {/* Badge + Actions */}
-      <div className="flex flex-col items-end gap-2">
-        <TypeBadge type={party.type} />
-        {/* Action buttons — visible on hover */}
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-          <button
-            onClick={() => onEdit(party)}
-            className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 transition-all duration-150"
-            title="Edit party"
-          >
-            <Pencil className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={() => onDelete(party)}
-            className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-all duration-150"
-            title="Delete party"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        </div>
+      {/* Action buttons — visible on hover */}
+      <div className="flex items-center justify-end gap-1 pt-2 border-t border-slate-800/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+        <button
+          onClick={() => onEdit(party)}
+          className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 transition-all duration-150"
+          title="Edit party"
+        >
+          <Pencil className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={() => onDelete(party)}
+          className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-all duration-150"
+          title="Delete party"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
       </div>
     </div>
   );
@@ -129,17 +165,17 @@ function PartyCard({ party, onEdit, onDelete }) {
 export default function PartyList({ parties, loading, error }) {
   const { currentUser } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
-  const [editingParty, setEditingParty] = useState(null);  // party being edited
-  const [deletingParty, setDeletingParty] = useState(null); // party pending delete confirm
+  const [editingParty, setEditingParty] = useState(null);
+  const [deletingParty, setDeletingParty] = useState(null);
 
-  // Client-side search filter — no extra Firestore reads
   const filtered = parties.filter((p) => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return true;
-    return (
-      p.name.toLowerCase().includes(q) ||
-      (p.mobile && p.mobile.includes(q))
-    );
+    const nameMatch = p.name?.toLowerCase().includes(q);
+    const mobMatch =
+      p.mobiles?.some((m) => m.includes(q)) || (p.mobile && p.mobile.includes(q));
+    const cityMatch = p.city?.toLowerCase().includes(q);
+    return nameMatch || mobMatch || cityMatch;
   });
 
   const handleDeleteConfirm = async () => {

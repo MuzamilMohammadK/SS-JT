@@ -4,11 +4,12 @@ import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/layout/ProtectedRoute";
 
 // Pages
-import AuthPage      from "./pages/AuthPage";
-import PartiesPage   from "./pages/PartiesPage";
-import LedgerPage    from "./pages/LedgerPage";
-import HistoryPage   from "./pages/HistoryPage";
-import AnalyticsPage from "./pages/AnalyticsPage";
+import AuthPage              from "./pages/AuthPage";
+import PartiesPage           from "./pages/PartiesPage";
+import RegisteredPartiesPage from "./pages/RegisteredPartiesPage";
+import LedgerPage            from "./pages/LedgerPage";
+import HistoryPage           from "./pages/HistoryPage";
+import AnalyticsPage         from "./pages/AnalyticsPage";
 
 // PWA service-worker hook
 import { usePWA } from "./hooks/usePWA";
@@ -47,11 +48,12 @@ export default function App() {
           {/* Public */}
           <Route path="/auth" element={<AuthPage />} />
 
-          {/* Protected — 4 views */}
-          <Route path="/parties"   element={<ProtectedRoute><PartiesPage /></ProtectedRoute>} />
-          <Route path="/ledger"    element={<ProtectedRoute><LedgerPage /></ProtectedRoute>} />
-          <Route path="/history"   element={<ProtectedRoute><HistoryPage /></ProtectedRoute>} />
-          <Route path="/analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
+          {/* Protected — views */}
+          <Route path="/parties"            element={<ProtectedRoute><PartiesPage /></ProtectedRoute>} />
+          <Route path="/registered-parties" element={<ProtectedRoute><RegisteredPartiesPage /></ProtectedRoute>} />
+          <Route path="/ledger"             element={<ProtectedRoute><LedgerPage /></ProtectedRoute>} />
+          <Route path="/history"            element={<ProtectedRoute><HistoryPage /></ProtectedRoute>} />
+          <Route path="/analytics"          element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
 
           {/* Default → Parties */}
           <Route path="/" element={<Navigate to="/parties" replace />} />

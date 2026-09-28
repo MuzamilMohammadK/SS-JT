@@ -1,25 +1,101 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../../firebase/config";
 import { useAuth } from "../../context/AuthContext";
+import { useParties } from "../../hooks/useParties";
 import { validateName, validateMobile } from "../../utils/validators";
-import { UserPlus, Phone, Tag } from "lucide-react";
+import {
+  UserPlus,
+  Phone,
+  Tag,
+  Plus,
+  Trash2,
+  MapPin,
+  Users,
+  ExternalLink,
+  Loader2,
+  AlertCircle,
+  PhoneCall,
+} from "lucide-react";
 import toast from "react-hot-toast";
 
-const INITIAL = { name: "", mobile: "", type: "Customer" };
+const INITIAL = {
+  name: "",
+  mobiles: [""],
+  type: "",
+  address: "",
+  city: "",
+  state: "",
+  pincode: "",
+};
+
+function getInitials(name) {
+  const words = name.trim().split(/\s+/);
+  return words.length > 1
+    ? words.map((w) => w[0]).join("").toUpperCase().slice(0, 2)
+    : name.slice(0, 2).toUpperCase();
+}
 
 export default function PartyForm() {
   const { currentUser } = useAuth();
+  const uid = currentUser?.uid;
+  const { parties = [], loading: pLoading, error: pError } = useParties(uid);
+
   const [form, setForm] = useState(INITIAL);
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
 
+  const setField = (k) => (e) => {
+    setForm((f) => ({ ...f, [k]: e.target.value }));
+    if (errors[k]) setErrors((er) => ({ ...er, [k]: null }));
+  };
+
+  const handleMobileChange = (idx, val) => {
+    const digits = val.replace(/\D/g, "").slice(0, 10);
+    setForm((f) => {
+      const updated = [...f.mobiles];
+      updated[idx] = digits;
+      return { ...f, mobiles: updated };
+    });
+    if (errors.mobiles) setErrors((er) => ({ ...er, mobiles: null }));
+  };
+
+  const handleAddMobile = () => {
+    setForm((f) => ({ ...f, mobiles: [...f.mobiles, ""] }));
+  };
+
+  const handleRemoveMobile = (idx) => {
+    if (form.mobiles.length <= 1) return;
+    setForm((f) => ({
+      ...f,
+      mobiles: f.mobiles.filter((_, i) => i !== idx),
+    }));
+  };
+
   const validate = () => {
     const e = {};
     const nameErr = validateName(form.name);
-    const mobileErr = validateMobile(form.mobile);
     if (nameErr) e.name = nameErr;
-    if (mobileErr) e.mobile = mobileErr;
+
+    const primaryMob = form.mobiles[0] || "";
+    const primaryErr = validateMobile(primaryMob);
+    if (primaryErr) {
+      e.mobiles = "Primary mobile number must be 10 digits.";
+    } else {
+      for (let i = 1; i < form.mobiles.length; i++) {
+        const m = form.mobiles[i];
+        if (m && m.length !== 10) {
+          e.mobiles = `Mobile number #${i + 1} must be 10 digits.`;
+          break;
+        }
+      }
+    }
+
+    if (!form.type) {
+      e.type = "Please select a party type.";
+      toast.error("Please select a party type (Customer or Supplier).");
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -28,11 +104,21 @@ export default function PartyForm() {
     ev.preventDefault();
     if (!validate()) return;
     setLoading(true);
+
+    const cleanMobiles = form.mobiles
+      .map((m) => m.replace(/\D/g, ""))
+      .filter(Boolean);
+
     try {
-      await addDoc(collection(db, "users", currentUser.uid, "parties"), {
+      await addDoc(collection(db, "users", uid, "parties"), {
         name: form.name.trim(),
-        mobile: form.mobile.replace(/\D/g, ""),
+        mobile: cleanMobiles[0] || "",
+        mobiles: cleanMobiles,
         type: form.type,
+        address: form.address.trim(),
+        city: form.city.trim(),
+        state: form.state.trim(),
+        pincode: form.pincode.replace(/\D/g, "").slice(0, 6),
         createdAt: serverTimestamp(),
       });
       toast.success(`Party "${form.name.trim()}" added successfully.`);
@@ -46,100 +132,323 @@ export default function PartyForm() {
     }
   };
 
-  const handleNameChange = (e) => {
-    setForm((f) => ({ ...f, name: e.target.value }));
-    if (errors.name) setErrors((er) => ({ ...er, name: null }));
-  };
-
-  const handleMobileChange = (e) => {
-    // Strip non-digits and enforce 10-char max
-    const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
-    setForm((f) => ({ ...f, mobile: digits }));
-    if (errors.mobile) setErrors((er) => ({ ...er, mobile: null }));
-  };
+  // Recent 5 registered parties (newest first)
+  const recentParties = [...parties]
+    .sort((a, b) => {
+      const tA = a.createdAt?.seconds || 0;
+      const tB = b.createdAt?.seconds || 0;
+      return tB - tA;
+    })
+    .slice(0, 5);
 
   return (
-    <div className="card p-6">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-indigo-500/15">
-          <UserPlus className="w-5 h-5 text-indigo-400" />
+    <div className="space-y-8">
+      {/* ── Add Party Card ── */}
+      <div className="card p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-indigo-500/15">
+            <UserPlus className="w-5 h-5 text-indigo-400" />
+          </div>
+          <div>
+            <h2 className="section-title">Add New Party</h2>
+            <p className="text-slate-500 text-xs mt-0.5">Register a customer or supplier account</p>
+          </div>
         </div>
-        <div>
-          <h2 className="section-title">Add New Party</h2>
-          <p className="text-slate-500 text-xs mt-0.5">Register a customer or supplier account</p>
-        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+          {/* Row 1: Name + Type Radio */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Party Name */}
+            <div>
+              <label htmlFor="party-name" className="label">
+                Party Name
+              </label>
+              <input
+                id="party-name"
+                type="text"
+                value={form.name}
+                onChange={setField("name")}
+                placeholder="e.g. Ramesh Textiles"
+                className={`input-base ${errors.name ? "input-error" : ""}`}
+              />
+              {errors.name && (
+                <p className="mt-1.5 text-rose-400 text-xs font-medium">⚠ {errors.name}</p>
+              )}
+            </div>
+
+            {/* Party Type Radio */}
+            <div>
+              <label className="label flex items-center gap-1">
+                <Tag className="w-3 h-3" /> Party Type
+              </label>
+              <div className="flex items-center gap-3 pt-1">
+                {["Customer", "Supplier"].map((opt) => (
+                  <label
+                    key={opt}
+                    className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border cursor-pointer text-sm font-medium transition-all select-none ${
+                      form.type === opt
+                        ? "border-indigo-500 bg-indigo-500/15 text-indigo-300 shadow-sm"
+                        : "border-slate-700/60 bg-slate-800/50 text-slate-400 hover:border-slate-600 hover:text-slate-200"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="partyType"
+                      value={opt}
+                      checked={form.type === opt}
+                      onChange={(e) => {
+                        setForm((f) => ({ ...f, type: e.target.value }));
+                        if (errors.type) setErrors((er) => ({ ...er, type: null }));
+                      }}
+                      className="w-4 h-4 text-indigo-500 accent-indigo-500 cursor-pointer"
+                    />
+                    <span>{opt}</span>
+                  </label>
+                ))}
+              </div>
+              {errors.type && (
+                <p className="mt-1.5 text-rose-400 text-xs font-medium">⚠ {errors.type}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Row 2: Multiple Mobile Numbers */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="label mb-0 flex items-center gap-1">
+                <Phone className="w-3 h-3" /> Mobile Numbers
+              </label>
+              <button
+                type="button"
+                onClick={handleAddMobile}
+                className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-semibold transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add Another Number
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+              {form.mobiles.map((mob, idx) => (
+                <div key={idx} className="flex items-center gap-1.5">
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    value={mob}
+                    onChange={(e) => handleMobileChange(idx, e.target.value)}
+                    placeholder={idx === 0 ? "Primary mobile (10 digits)" : `Secondary #${idx + 1}`}
+                    maxLength={10}
+                    className="input-base"
+                  />
+                  {form.mobiles.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveMobile(idx)}
+                      className="p-2.5 rounded-xl text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors flex-shrink-0"
+                      title="Remove number"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            {errors.mobiles && (
+              <p className="mt-1.5 text-rose-400 text-xs font-medium">⚠ {errors.mobiles}</p>
+            )}
+          </div>
+
+          {/* Row 3: Address Details */}
+          <div className="pt-2 border-t border-slate-800 space-y-3">
+            <label className="label flex items-center gap-1">
+              <MapPin className="w-3 h-3" /> Address Details (Optional)
+            </label>
+            <div>
+              <input
+                type="text"
+                value={form.address}
+                onChange={setField("address")}
+                placeholder="Door No., Street, Building, Market or Area"
+                className="input-base text-sm"
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <input
+                type="text"
+                value={form.city}
+                onChange={setField("city")}
+                placeholder="City / Town"
+                className="input-base text-sm"
+              />
+              <input
+                type="text"
+                value={form.state}
+                onChange={setField("state")}
+                placeholder="State"
+                className="input-base text-sm"
+              />
+              <input
+                type="text"
+                inputMode="numeric"
+                value={form.pincode}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, "").slice(0, 6);
+                  setForm((f) => ({ ...f, pincode: val }));
+                }}
+                placeholder="PIN Code (6 digits)"
+                maxLength={6}
+                className="input-base text-sm"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <button type="submit" disabled={loading} className="btn-primary">
+              {loading ? (
+                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <UserPlus className="w-4 h-4" />
+              )}
+              {loading ? "Adding…" : "Add Party"}
+            </button>
+          </div>
+        </form>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Party Name */}
-          <div className="md:col-span-1">
-            <label htmlFor="party-name" className="label">Party Name</label>
-            <input
-              id="party-name"
-              type="text"
-              value={form.name}
-              onChange={handleNameChange}
-              placeholder="e.g. Ramesh Textiles"
-              className={`input-base ${errors.name ? "input-error" : ""}`}
-            />
-            {errors.name && (
-              <p className="mt-1.5 text-rose-400 text-xs font-medium">{errors.name}</p>
-            )}
+      {/* ── Recent 5 Registered Parties Section ── */}
+      <div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-purple-500/15 flex items-center justify-center">
+              <Users className="w-4 h-4 text-purple-400" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="section-title text-base">Recent Registered Parties</h2>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-500/15 text-indigo-300 border border-indigo-500/25">
+                  Latest 5
+                </span>
+              </div>
+              <p className="text-slate-500 text-xs mt-0.5">
+                Showing recent {Math.min(5, parties.length)} of {parties.length} registered parties
+              </p>
+            </div>
           </div>
 
-          {/* Mobile */}
-          <div>
-            <label htmlFor="party-mobile" className="label">
-              <span className="flex items-center gap-1">
-                <Phone className="w-3 h-3" /> Mobile Number
-              </span>
-            </label>
-            <input
-              id="party-mobile"
-              type="tel"
-              inputMode="numeric"
-              value={form.mobile}
-              onChange={handleMobileChange}
-              placeholder="10-digit number"
-              maxLength={10}
-              className={`input-base ${errors.mobile ? "input-error" : ""}`}
-            />
-            {errors.mobile && (
-              <p className="mt-1.5 text-rose-400 text-xs font-medium">{errors.mobile}</p>
-            )}
-          </div>
-
-          {/* Type */}
-          <div>
-            <label htmlFor="party-type" className="label">
-              <span className="flex items-center gap-1">
-                <Tag className="w-3 h-3" /> Party Type
-              </span>
-            </label>
-            <select
-              id="party-type"
-              value={form.type}
-              onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
-              className="input-base cursor-pointer"
-            >
-              <option value="Customer">Customer (Accounts Receivable)</option>
-              <option value="Supplier">Supplier (Accounts Payable)</option>
-            </select>
-          </div>
+          <Link
+            to="/registered-parties"
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 text-xs font-semibold whitespace-nowrap transition-all self-start sm:self-auto shadow-sm"
+          >
+            <span>View All Registered Parties ({parties.length})</span>
+            <ExternalLink className="w-3.5 h-3.5" />
+          </Link>
         </div>
 
-        <div className="flex justify-end pt-1">
-          <button type="submit" disabled={loading} className="btn-primary">
-            {loading ? (
-              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            ) : (
-              <UserPlus className="w-4 h-4" />
-            )}
-            {loading ? "Adding…" : "Add Party"}
-          </button>
-        </div>
-      </form>
+        {/* List of Recent 5 Parties */}
+        {pLoading ? (
+          <div className="flex items-center justify-center py-10 text-slate-500">
+            <Loader2 className="w-5 h-5 animate-spin mr-3 text-indigo-400" />
+            <span className="text-sm">Loading recent parties…</span>
+          </div>
+        ) : pError ? (
+          <div className="alert-error">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            <span>{pError}</span>
+          </div>
+        ) : parties.length === 0 ? (
+          <div className="card p-8 text-center flex flex-col items-center justify-center">
+            <div className="w-12 h-12 rounded-2xl bg-slate-800/80 flex items-center justify-center mb-3">
+              <Users className="w-6 h-6 text-slate-600" />
+            </div>
+            <p className="text-slate-400 font-semibold text-sm">No parties registered yet</p>
+            <p className="text-slate-600 text-xs mt-1">
+              Use the form above to add your first customer or supplier.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 animate-fade-in">
+            {recentParties.map((party) => {
+              const avatarGradient =
+                party.type === "Customer"
+                  ? "from-indigo-600 to-purple-600"
+                  : "from-rose-600 to-pink-600";
+
+              const allMobiles = party.mobiles?.length
+                ? party.mobiles
+                : party.mobile
+                ? [party.mobile]
+                : [];
+
+              const addressText = [
+                party.address,
+                party.city,
+                party.state,
+                party.pincode ? `- ${party.pincode}` : "",
+              ]
+                .filter(Boolean)
+                .join(", ");
+
+              return (
+                <div
+                  key={party.id}
+                  className="card-hover p-4 flex flex-col justify-between gap-3 group"
+                >
+                  <div className="flex items-start gap-3.5">
+                    <div
+                      className={`flex-shrink-0 w-11 h-11 rounded-xl bg-gradient-to-br ${avatarGradient} flex items-center justify-center text-white font-bold text-sm shadow-lg`}
+                    >
+                      {getInitials(party.name)}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-slate-100 font-semibold text-sm truncate" title={party.name}>
+                          {party.name}
+                        </p>
+                        <span
+                          className={
+                            party.type === "Customer" ? "badge-indigo text-[10px]" : "badge-rose text-[10px]"
+                          }
+                        >
+                          {party.type === "Customer" ? "Customer · AR" : "Supplier · AP"}
+                        </span>
+                      </div>
+
+                      {/* Phone Numbers */}
+                      {allMobiles.length > 0 ? (
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                          {allMobiles.map((mob, idx) => (
+                            <a
+                              key={idx}
+                              href={`tel:${mob}`}
+                              className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-indigo-300 bg-slate-800/80 px-2 py-0.5 rounded-md border border-slate-700/50 transition-colors"
+                              title="Click to call"
+                            >
+                              <PhoneCall className="w-2.5 h-2.5 text-slate-500" />
+                              <span>{mob}</span>
+                            </a>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-slate-600 text-xs mt-1">No phone number</p>
+                      )}
+
+                      {/* Address */}
+                      {addressText && (
+                        <div className="flex items-start gap-1.5 mt-2 text-slate-400 text-xs">
+                          <MapPin className="w-3.5 h-3.5 text-indigo-400/70 flex-shrink-0 mt-0.5" />
+                          <p className="line-clamp-2 leading-relaxed text-slate-400 text-[11px]">
+                            {addressText}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

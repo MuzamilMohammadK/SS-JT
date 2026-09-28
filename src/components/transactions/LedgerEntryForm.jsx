@@ -4,7 +4,7 @@ import { db } from "../../services/firebase";
 import { useAuth } from "../../context/AuthContext";
 import { useTransactions } from "../../hooks/useTransactions";
 import {
-  validatePositive, validateNonNegative, computeGST, fmtINR,
+  validatePositive, validateNonNegative, computeGST, fmtINR, normalizeInvoiceNumber,
 } from "../../utils/validators";
 import {
   Plus, Trash2, Receipt, IndianRupee, ShoppingBag,
@@ -143,14 +143,29 @@ export default function LedgerEntryForm({ parties }) {
   const [errors,  setErrors]  = useState({});
   const [loading, setLoading] = useState(false);
 
-  // Check if invoice number already exists
-  const trimmedInvoice = form.invoiceNumber.trim().toLowerCase();
+  // Normalized invoice number (strips leading zeros: "001" -> "1")
+  const normalizedInvoice = normalizeInvoiceNumber(form.invoiceNumber);
+
+  // Check if invoice number already exists:
+  // - Sales: must be unique across all Sales
+  // - Purchases: can be shared between different suppliers, only duplicate if from the SAME supplier
   const existingInvoiceTx = useMemo(() => {
-    if (!trimmedInvoice) return null;
-    return transactions.find(
-      (tx) => tx.invoiceNumber && tx.invoiceNumber.trim().toLowerCase() === trimmedInvoice
-    );
-  }, [transactions, trimmedInvoice]);
+    if (!normalizedInvoice) return null;
+    return transactions.find((tx) => {
+      const txNormalized = normalizeInvoiceNumber(tx.invoiceNumber);
+      if (txNormalized !== normalizedInvoice) return false;
+
+      if (form.type === "Sale") {
+        return tx.type === "Sale";
+      }
+
+      if (form.type === "Purchase") {
+        return tx.type === "Purchase" && form.partyId && tx.partyId === form.partyId;
+      }
+
+      return false;
+    });
+  }, [transactions, normalizedInvoice, form.type, form.partyId]);
 
   // Compute subtotal from all rows
   const subTotal = useMemo(() =>
@@ -254,10 +269,11 @@ export default function LedgerEntryForm({ parties }) {
       }] : [];
 
       await addDoc(collection(db, "users", uid, "transactions"), {
-        partyId:         form.partyId,
-        partyName:       selectedParty?.name ?? "Unknown",
-        invoiceNumber:   form.invoiceNumber.trim(),
-        type:            form.type,
+        partyId:           form.partyId,
+        partyName:         selectedParty?.name ?? "Unknown",
+        invoiceNumber:     form.invoiceNumber.trim(),
+        normalizedInvoice: normalizedInvoice,
+        type:              form.type,
         sareeDetails,
         subTotalAmount:  parseFloat(subTotal.toFixed(2)),
         gstRate:         gstRateNum,
@@ -355,10 +371,12 @@ export default function LedgerEntryForm({ parties }) {
                 <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="font-bold text-rose-200">
-                    Invoice #{existingInvoiceTx.invoiceNumber} already exists!
+                    {form.type === "Purchase"
+                      ? `Purchase Invoice #${existingInvoiceTx.invoiceNumber} already recorded for this supplier!`
+                      : `Sales Invoice #${existingInvoiceTx.invoiceNumber} already exists!`}
                   </p>
                   <p className="text-[11px] text-rose-300/80 mt-0.5">
-                    Already used for <strong className="text-white">{existingInvoiceTx.partyName}</strong> on {formatDate(existingInvoiceTx.transactionDate)} ({fmtINR(existingInvoiceTx.totalAmount)}).
+                    Recorded on {formatDate(existingInvoiceTx.transactionDate)} ({fmtINR(existingInvoiceTx.totalAmount)}) for <strong className="text-white">{existingInvoiceTx.partyName}</strong>.
                   </p>
                 </div>
               </div>
@@ -376,24 +394,20 @@ export default function LedgerEntryForm({ parties }) {
           </div>
         </div>
 
-        {/* Transaction Type — 2×2 card grid */}
+        {/* Transaction Type — 2 card grid */}
         <div className="field">
           <label className="label">Transaction Type</label>
           <div className="grid grid-cols-2 gap-2">
             {[
-              { value: "Sale",            label: "Sale",            sub: "Sold to customer",         Icon: ArrowUpRight,  cls: "indigo" },
-              { value: "Purchase",        label: "Purchase",        sub: "Received from supplier",   Icon: ArrowDownLeft, cls: "rose"   },
-              { value: "Sale Return",     label: "Sale Return",     sub: "Customer returned sarees", Icon: RotateCcw,     cls: "amber"  },
-              { value: "Purchase Return", label: "Purchase Return", sub: "Returned to supplier",     Icon: RotateCcw,     cls: "teal"   },
+              { value: "Sale",     label: "Sale",     sub: "Sold to customer",       Icon: ArrowUpRight,  cls: "indigo" },
+              { value: "Purchase", label: "Purchase", sub: "Received from supplier", Icon: ArrowDownLeft, cls: "rose"   },
             ].map(({ value, label, sub, Icon, cls }) => (
               <button key={value} type="button"
                 onClick={() => setForm((f) => ({ ...f, type: value }))}
                 className={`flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all duration-200 ${
                   form.type === value
                     ? cls === "indigo" ? "bg-indigo-500/15 border-indigo-500/40 text-indigo-300"
-                    : cls === "rose"   ? "bg-rose-500/15 border-rose-500/40 text-rose-300"
-                    : cls === "amber"  ? "bg-amber-500/15 border-amber-500/40 text-amber-300"
-                    :                    "bg-teal-500/15 border-teal-500/40 text-teal-300"
+                    :                    "bg-rose-500/15 border-rose-500/40 text-rose-300"
                     : "bg-slate-800/40 border-slate-700/40 text-slate-400 hover:border-slate-600 hover:text-slate-300"
                 }`}>
                 <Icon className="w-4 h-4 flex-shrink-0" />

@@ -1,16 +1,17 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
-import { LogOut, Menu, X, Download, Users, Receipt, BookOpen, BarChart3 } from "lucide-react";
+import { LogOut, Menu, X, Download, Users, Receipt, BookOpen, BarChart3, Building2 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { usePWAInstall } from "../../hooks/usePWAInstall";
 import InstallModal from "./InstallModal";
 import toast from "react-hot-toast";
 
 const DESKTOP_NAV = [
-  { to: "/parties",   icon: Users,    label: "Parties"   },
-  { to: "/ledger",    icon: Receipt,  label: "Ledger"    },
-  { to: "/history",   icon: BookOpen, label: "History"   },
-  { to: "/analytics", icon: BarChart3,label: "Analytics" },
+  { to: "/parties",            icon: Users,     label: "Parties"   },
+  { to: "/registered-parties", icon: Building2, label: "Registered Parties" },
+  { to: "/ledger",             icon: Receipt,   label: "Ledger"    },
+  { to: "/history",            icon: BookOpen,  label: "History"   },
+  { to: "/analytics",          icon: BarChart3, label: "Analytics" },
 ];
 
 export default function Navbar() {
