@@ -29,8 +29,17 @@ export function AuthProvider({ children }) {
 
   const logout = () => signOut(auth);
 
+  const refreshUser = async () => {
+    if (auth.currentUser) {
+      await auth.currentUser.reload();
+      setCurrentUser(Object.create(auth.currentUser));
+      return auth.currentUser;
+    }
+    return null;
+  };
+
   return (
-    <AuthContext.Provider value={{ currentUser, register, login, logout, loading }}>
+    <AuthContext.Provider value={{ currentUser, register, login, logout, refreshUser, loading }}>
       {loading ? (
         <div className="min-h-dvh bg-slate-950 flex flex-col items-center justify-center gap-3">
           <div className="spinner" />

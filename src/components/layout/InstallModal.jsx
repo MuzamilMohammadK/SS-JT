@@ -1,11 +1,12 @@
+import { createPortal } from "react-dom";
 import { X, Smartphone, Share, MoreVertical, PlusSquare, ArrowDownToLine } from "lucide-react";
 
 export default function InstallModal({ isOpen, onClose, isIOS, onNativeInstall, hasNativePrompt }) {
-  if (!isOpen) return null;
+  if (!isOpen || typeof document === "undefined") return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
-      <div className="card-glass w-full max-w-md p-6 relative border border-indigo-500/20 shadow-2xl">
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fade-in overflow-y-auto">
+      <div className="card-glass w-full max-w-md p-6 relative border border-indigo-500/20 shadow-2xl m-auto">
         {/* Close Button */}
         <button
           onClick={onClose}
@@ -102,6 +103,7 @@ export default function InstallModal({ isOpen, onClose, isIOS, onNativeInstall, 
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

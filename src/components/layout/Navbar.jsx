@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
-import { LogOut, Menu, X, Download, Users, Receipt, BookOpen, BarChart3, Building2 } from "lucide-react";
+import { LogOut, Menu, X, Download, Users, Receipt, BookOpen, BarChart3, Building2, Settings } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { usePWAInstall } from "../../hooks/usePWAInstall";
 import InstallModal from "./InstallModal";
+import SettingsModal from "./SettingsModal";
 import toast from "react-hot-toast";
 
 const DESKTOP_NAV = [
@@ -15,22 +16,13 @@ const DESKTOP_NAV = [
 ];
 
 export default function Navbar() {
-  const { currentUser, logout } = useAuth();
+  const { currentUser } = useAuth();
   const {
     isInstallable, isInstalled, installApp,
     isModalOpen, closeModal, isIOS, hasNativePrompt,
   } = usePWAInstall();
   const [menuOpen, setMenuOpen] = useState(false);
-
-  const handleLogout = async () => {
-    try {
-      setMenuOpen(false);
-      await logout();
-      toast.success("Logged out successfully.");
-    } catch {
-      toast.error("Failed to log out. Please try again.");
-    }
-  };
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const avatar = currentUser?.email?.[0]?.toUpperCase() ?? "U";
 
@@ -88,23 +80,29 @@ export default function Navbar() {
               </button>
             )}
 
-            {/* User avatar + email (desktop) */}
-            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800/60 border border-slate-700/50">
+            {/* User avatar + email (desktop) — Click to open Settings */}
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800/60 hover:bg-slate-800 border border-slate-700/50 hover:border-indigo-500/40 transition-all cursor-pointer group"
+              title="Click to open Account Settings"
+            >
               <div className="w-5 h-5 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-[10px] font-bold">
                 {avatar}
               </div>
-              <span className="text-slate-300 text-xs font-medium max-w-[140px] truncate">
+              <span className="text-slate-300 group-hover:text-white text-xs font-medium max-w-[140px] truncate transition-colors">
                 {currentUser?.email}
               </span>
-            </div>
+            </button>
 
-            {/* Logout (desktop) */}
+            {/* Settings (desktop) */}
             <button
-              onClick={handleLogout}
-              className="hidden md:flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 hover:border-rose-500/40 text-rose-400 hover:text-rose-300 text-sm font-medium transition-all duration-200"
+              onClick={() => setSettingsOpen(true)}
+              className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600/15 hover:bg-indigo-600/25 border border-indigo-500/30 hover:border-indigo-500/50 text-indigo-300 hover:text-white text-xs font-medium transition-all duration-200"
+              title="Account Settings & Session"
             >
-              <LogOut className="w-3.5 h-3.5" />
-              Logout
+              <Settings className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Settings</span>
             </button>
 
             {/* Mobile hamburger */}
@@ -121,11 +119,15 @@ export default function Navbar() {
         {/* ── Mobile dropdown ── */}
         {menuOpen && (
           <div className="md:hidden border-t border-slate-800/60 py-3 space-y-2 animate-slide-in-down">
-            <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-slate-800/60 border border-slate-700/50">
+            <div
+              onClick={() => { setMenuOpen(false); setSettingsOpen(true); }}
+              className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-slate-800/60 border border-slate-700/50 cursor-pointer"
+            >
               <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold">
                 {avatar}
               </div>
-              <span className="text-slate-300 text-sm truncate">{currentUser?.email}</span>
+              <span className="text-slate-300 text-sm truncate flex-1">{currentUser?.email}</span>
+              <Settings className="w-4 h-4 text-indigo-400" />
             </div>
             {isInstallable && !isInstalled && (
               <button
@@ -137,11 +139,11 @@ export default function Navbar() {
               </button>
             )}
             <button
-              onClick={handleLogout}
-              className="flex items-center gap-2 w-full px-4 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm font-medium"
+              onClick={() => { setMenuOpen(false); setSettingsOpen(true); }}
+              className="flex items-center gap-2 w-full px-4 py-2.5 rounded-xl bg-indigo-600/15 border border-indigo-500/30 text-indigo-300 hover:text-white text-sm font-medium"
             >
-              <LogOut className="w-4 h-4" />
-              Logout
+              <Settings className="w-4 h-4 text-indigo-400" />
+              Settings &amp; Logout
             </button>
           </div>
         )}
@@ -153,6 +155,11 @@ export default function Navbar() {
         isIOS={isIOS}
         onNativeInstall={installApp}
         hasNativePrompt={hasNativePrompt}
+      />
+
+      <SettingsModal
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
       />
     </header>
   );

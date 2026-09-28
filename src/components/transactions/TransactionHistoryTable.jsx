@@ -1418,19 +1418,38 @@ export default function TransactionHistoryTable({ transactions, loading, error }
     ? transactions.filter((tx) => isPurchase(tx.type))
     : transactions;
 
-  const filtered = tabFiltered.filter((tx) => {
-    const q           = searchParty.trim().toLowerCase();
-    const matchParty  = !q
-      || tx.partyName?.toLowerCase().includes(q)
-      || tx.invoiceNumber?.toLowerCase().includes(q)
-      || tx.notes?.toLowerCase().includes(q);
-    const matchStatus = filterStatus === "All"
-      ? true
-      : filterStatus === "Returns"
-      ? (isReturn(tx.type) || !!tx.returnOfTxId)
-      : tx.status === filterStatus;
-    return matchParty && matchStatus;
-  });
+  const filtered = tabFiltered
+    .filter((tx) => {
+      const q           = searchParty.trim().toLowerCase();
+      const matchParty  = !q
+        || tx.partyName?.toLowerCase().includes(q)
+        || tx.invoiceNumber?.toLowerCase().includes(q)
+        || tx.notes?.toLowerCase().includes(q);
+      const matchStatus = filterStatus === "All"
+        ? true
+        : filterStatus === "Returns"
+        ? (isReturn(tx.type) || !!tx.returnOfTxId)
+        : tx.status === filterStatus;
+      return matchParty && matchStatus;
+    })
+    .sort((a, b) => {
+      const invA = (a.invoiceNumber || "").trim();
+      const invB = (b.invoiceNumber || "").trim();
+
+      // If missing invoice number, push to bottom
+      if (!invA && !invB) {
+        return (b.transactionDate || "").localeCompare(a.transactionDate || "");
+      }
+      if (!invA) return 1;
+      if (!invB) return -1;
+
+      // Natural descending comparison (e.g. 100 > 99 > 2 > 1)
+      const cmp = invB.localeCompare(invA, undefined, { numeric: true, sensitivity: "base" });
+      if (cmp !== 0) return cmp;
+
+      // Secondary fallback: date descending
+      return (b.transactionDate || "").localeCompare(a.transactionDate || "");
+    });
 
   // Action toggle helper: opens inline subview or closes if clicking same action
   const handleAction = (txId, tab) => {
@@ -1542,7 +1561,10 @@ export default function TransactionHistoryTable({ transactions, loading, error }
                 <thead className="bg-slate-900/60 border-b border-slate-800/60">
                   <tr>
                     <th className="table-th">Date</th>
-                    <th className="table-th">Invoice #</th>
+                    <th className="table-th whitespace-nowrap">
+                      <span>Invoice #</span>{" "}
+                      <span className="text-indigo-400 font-semibold" title="Sorted in descending order">↓</span>
+                    </th>
                     <th className="table-th">Party</th>
                     <th className="table-th">Type</th>
                     <th className="table-th text-right">Total</th>

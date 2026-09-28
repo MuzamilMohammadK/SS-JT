@@ -205,6 +205,20 @@ export default function LedgerTable({ transactions, parties, loading }) {
       if (!pName.includes(q) && !tx.notes?.toLowerCase().includes(q) && !tx.invoiceNumber?.toLowerCase().includes(q)) return false;
     }
     return true;
+  }).sort((a, b) => {
+    const invA = (a.invoiceNumber || "").trim();
+    const invB = (b.invoiceNumber || "").trim();
+
+    if (!invA && !invB) {
+      return (b.transactionDate || "").localeCompare(a.transactionDate || "");
+    }
+    if (!invA) return 1;
+    if (!invB) return -1;
+
+    const cmp = invB.localeCompare(invA, undefined, { numeric: true, sensitivity: "base" });
+    if (cmp !== 0) return cmp;
+
+    return (b.transactionDate || "").localeCompare(a.transactionDate || "");
   });
 
   if (loading) {
