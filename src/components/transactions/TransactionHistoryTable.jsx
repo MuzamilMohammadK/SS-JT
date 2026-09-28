@@ -1,13 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { doc, updateDoc, collection, addDoc, serverTimestamp, arrayUnion } from "firebase/firestore";
 import { db } from "../../services/firebase";
 import { useAuth } from "../../context/AuthContext";
+import { useParties } from "../../hooks/useParties";
 import { fmtINR, validateNonNegative } from "../../utils/validators";
 import {
   Search, X, BookOpen, ArrowUpRight, ArrowDownLeft,
   CheckCircle2, Clock, ChevronUp, Eye, CreditCard,
   Loader2, AlertCircle, CalendarDays, RotateCcw, FileText,
-  IndianRupee, Pencil, Plus, Trash2, Minus,
+  IndianRupee, Pencil, Plus, Trash2, Minus, Users,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -744,7 +745,7 @@ function InlineSettleView({ tx, uid, onDone }) {
 }
 
 // ── Inline Edit Sarees / Add Items Subview (No pop-up) ─────────
-function InlineEditItemsView({ tx, uid, onDone }) {
+function InlineEditItemsView({ tx, uid, parties = [], onDone }) {
   const initialItems = (tx.sareeDetails && tx.sareeDetails.length > 0)
     ? tx.sareeDetails.map((it) => ({
         sareeName: it.sareeName || "",
@@ -756,6 +757,28 @@ function InlineEditItemsView({ tx, uid, onDone }) {
   const [items,   setItems]   = useState(initialItems);
   const [gstRate, setGstRate] = useState(String(Number(tx.gstRate) || 0));
   const [loading, setLoading] = useState(false);
+
+  // Party selection & custom name state
+  const initialMatchedParty = (parties || []).find(
+    (p) => p.id === tx.partyId || (tx.partyName && p.name.trim().toLowerCase() === tx.partyName.trim().toLowerCase())
+  );
+  const [selectedPartyId, setSelectedPartyId] = useState(
+    initialMatchedParty ? initialMatchedParty.id : (tx.partyId || "")
+  );
+  const [partyName, setPartyName] = useState(tx.partyName || initialMatchedParty?.name || "");
+  const [isCustomParty, setIsCustomParty] = useState(!initialMatchedParty && Boolean(tx.partyName));
+
+  useEffect(() => {
+    if (!selectedPartyId && parties && parties.length > 0) {
+      const match = parties.find(
+        (p) => p.id === tx.partyId || (tx.partyName && p.name.trim().toLowerCase() === tx.partyName.trim().toLowerCase())
+      );
+      if (match) {
+        setSelectedPartyId(match.id);
+        if (!partyName) setPartyName(match.name);
+      }
+    }
+  }, [parties, tx.partyId, tx.partyName]);
 
   const updateItem = (index, field, val) => {
     const updated = [...items];
@@ -794,7 +817,13 @@ function InlineEditItemsView({ tx, uid, onDone }) {
   const newDue = parseFloat(Math.max(0, newTotal - paidSoFar).toFixed(2));
 
   const handleSave = async () => {
-    // Validate
+    const finalPartyName = partyName.trim();
+    if (!finalPartyName) {
+      toast.error("Please enter or select a valid party name.");
+      return;
+    }
+
+    // Validate saree items
     for (let i = 0; i < items.length; i++) {
       const it = items[i];
       if (!it.sareeName.trim()) {
@@ -824,7 +853,12 @@ function InlineEditItemsView({ tx, uid, onDone }) {
 
       const isFullySettled = newDue <= 0.005;
 
+      const matchedParty = (parties || []).find((p) => p.id === selectedPartyId);
+      const finalPartyId = matchedParty ? matchedParty.id : (isCustomParty ? null : (selectedPartyId || null));
+
       await updateDoc(doc(db, "users", uid, "transactions", tx.id), {
+        partyId:        finalPartyId,
+        partyName:      finalPartyName,
         sareeDetails,
         subTotalAmount: parseFloat(newSubtotal.toFixed(2)),
         gstRate:        gstRateNum,
@@ -835,7 +869,7 @@ function InlineEditItemsView({ tx, uid, onDone }) {
         settledAt:      isFullySettled ? (tx.settledAt || serverTimestamp()) : null,
       });
 
-      toast.success("Saree counts & items updated successfully.");
+      toast.success("Party name, sarees & totals updated successfully.");
       onDone();
     } catch (err) {
       toast.error("Failed to update saree items.");
@@ -854,13 +888,101 @@ function InlineEditItemsView({ tx, uid, onDone }) {
             <Pencil className="w-4 h-4 text-indigo-400" />
           </div>
           <div>
-            <h4 className="text-slate-100 font-bold text-sm">Edit Sarees & Add Items</h4>
-            <p className="text-slate-500 text-xs">{tx.partyName} · Adjust counts or add new sarees</p>
+            <h4 className="text-slate-100 font-bold text-sm">Edit Sarees &amp; Party Name</h4>
+            <p className="text-slate-500 text-xs">{partyName || tx.partyName} · Adjust party, counts, or items</p>
           </div>
         </div>
         <span className="text-xs font-bold text-indigo-300 bg-indigo-500/15 px-2.5 py-1 rounded-lg border border-indigo-500/30">
           {totalSareesCount} {totalSareesCount === 1 ? "Saree" : "Sarees"} Total
         </span>
+      </div>
+
+      {/* ── Party Edit Section ── */}
+      <div className="rounded-xl bg-slate-800/60 border border-slate-700/60 p-3.5 space-y-2.5">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+            <Users className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Party / Customer / Supplier</span>
+          </label>
+          <div className="flex items-center gap-2">
+            {isCustomParty ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCustomParty(false);
+                  if (initialMatchedParty) {
+                    setSelectedPartyId(initialMatchedParty.id);
+                    setPartyName(initialMatchedParty.name);
+                  }
+                }}
+                className="text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold underline underline-offset-2 transition-colors"
+              >
+                Select from registered list
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCustomParty(true);
+                  setSelectedPartyId("");
+                }}
+                className="text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold underline underline-offset-2 transition-colors"
+              >
+                Type custom name
+              </button>
+            )}
+          </div>
+        </div>
+
+        {!isCustomParty ? (
+          <div className="space-y-1.5">
+            <select
+              value={selectedPartyId}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === "__custom__") {
+                  setIsCustomParty(true);
+                  setSelectedPartyId("");
+                } else {
+                  setSelectedPartyId(val);
+                  const p = (parties || []).find((x) => x.id === val);
+                  if (p) setPartyName(p.name);
+                }
+              }}
+              className="select-base text-sm py-2"
+            >
+              <option value="">— Select registered party —</option>
+              {parties && parties.length > 0 ? (
+                parties.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} ({p.category === "Customer" ? "Customer" : "Supplier"})
+                  </option>
+                ))
+              ) : (
+                <option value="" disabled>No registered parties found</option>
+              )}
+              <option value="__custom__">✏️ Type custom / other party name</option>
+            </select>
+            {selectedPartyId && (
+              <p className="text-[10px] text-indigo-300 font-medium">
+                Current selection: <span className="text-white font-semibold">{partyName}</span>
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            <input
+              type="text"
+              value={partyName}
+              onChange={(e) => setPartyName(e.target.value)}
+              placeholder="e.g. Ramesh Silks, Sri Krishna..."
+              className="input-base text-sm py-2"
+            />
+            <p className="text-[10px] text-slate-400">
+              Type the corrected party name directly if the wrong person was entered.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Saree rows */}
@@ -1077,7 +1199,7 @@ function InlineEditItemsView({ tx, uid, onDone }) {
           style={{ minHeight: "44px" }}
         >
           {loading ? <span className="spinner" /> : <Pencil className="w-4 h-4" />}
-          {loading ? "Saving Changes…" : "Save Sarees & Totals"}
+          {loading ? "Saving Changes…" : "Save Party, Sarees & Totals"}
         </button>
       </div>
     </div>
@@ -1085,7 +1207,7 @@ function InlineEditItemsView({ tx, uid, onDone }) {
 }
 
 // ── Detail Drawer (Contains all inline subviews) ───────────────
-function DetailDrawer({ tx, uid, activeTab = "details", onTabChange, onClose }) {
+function DetailDrawer({ tx, uid, parties = [], activeTab = "details", onTabChange, onClose }) {
   const terms = getPaymentTerms(tx);
   const total = Number(tx.totalAmount) || 0;
   const paid  = Number(tx.amountPaid) || 0;
@@ -1369,7 +1491,7 @@ function DetailDrawer({ tx, uid, activeTab = "details", onTabChange, onClose }) 
 
         {/* ── Subview 2: Edit Sarees Count & Add Items Inline ── */}
         {activeTab === "editItems" && (
-          <InlineEditItemsView tx={tx} uid={uid} onDone={() => onTabChange("details")} />
+          <InlineEditItemsView tx={tx} uid={uid} parties={parties} onDone={() => onTabChange("details")} />
         )}
 
         {/* ── Subview 3: Change Date Inline ── */}
@@ -1396,6 +1518,7 @@ function DetailDrawer({ tx, uid, activeTab = "details", onTabChange, onClose }) 
 export default function TransactionHistoryTable({ transactions, loading, error }) {
   const { currentUser } = useAuth();
   const uid = currentUser?.uid;
+  const { parties } = useParties(uid);
 
   const [activeTab,    setActiveTab]    = useState(null); // null = All, "Sales", "Purchases"
   const [searchParty,  setSearchParty]  = useState("");
@@ -1680,6 +1803,7 @@ export default function TransactionHistoryTable({ transactions, loading, error }
                             <DetailDrawer
                               tx={tx}
                               uid={uid}
+                              parties={parties}
                               activeTab={expandedTab}
                               onTabChange={(tab) => setExpandedTab(tab)}
                               onClose={() => setExpandedId(null)}
@@ -1860,6 +1984,7 @@ export default function TransactionHistoryTable({ transactions, loading, error }
                       <DetailDrawer
                         tx={tx}
                         uid={uid}
+                        parties={parties}
                         activeTab={expandedTab}
                         onTabChange={(tab) => setExpandedTab(tab)}
                         onClose={() => setExpandedId(null)}
