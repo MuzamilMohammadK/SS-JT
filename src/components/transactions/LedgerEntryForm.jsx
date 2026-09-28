@@ -205,7 +205,9 @@ export default function LedgerEntryForm({ parties }) {
     const e = {};
     if (!form.partyId) e.partyId = "Please select a party.";
 
-    if (existingInvoiceTx) {
+    if (!form.invoiceNumber.trim()) {
+      e.invoiceNumber = "Invoice number is required.";
+    } else if (existingInvoiceTx) {
       e.invoiceNumber = `Invoice #${existingInvoiceTx.invoiceNumber} already exists for ${existingInvoiceTx.partyName}.`;
     }
 
@@ -341,17 +343,21 @@ export default function LedgerEntryForm({ parties }) {
           <div className="field">
             <div className="flex items-center justify-between">
               <label htmlFor="le-invoice" className="label flex items-center gap-1">
-                <FileText className="w-3 h-3 text-indigo-400" /> Invoice Number
+                <FileText className="w-3 h-3 text-indigo-400" /> Invoice Number <span className="text-rose-400">*</span>
               </label>
               {existingInvoiceTx ? (
-                <span className="text-[10px] text-rose-400 font-bold uppercase tracking-wider flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3" /> Already Exists
+                <span className="text-[10px] text-rose-400 font-bold uppercase tracking-wider flex items-center gap-1 animate-pulse">
+                  <AlertCircle className="w-3 h-3" /> Alert: Already Exists
                 </span>
               ) : form.invoiceNumber.trim() ? (
                 <span className="text-[10px] text-emerald-400 font-semibold flex items-center gap-0.5">
                   <CheckCircle2 className="w-3 h-3" /> Available
                 </span>
-              ) : null}
+              ) : (
+                <span className="text-[10px] text-amber-400/90 font-medium flex items-center gap-1">
+                  <Bell className="w-2.5 h-2.5 text-amber-400" /> Alert: Required
+                </span>
+              )}
             </div>
             <input
               id="le-invoice"
@@ -373,8 +379,8 @@ export default function LedgerEntryForm({ parties }) {
                 <div>
                   <p className="font-bold text-rose-200">
                     {form.type === "Purchase"
-                      ? `Purchase Invoice #${existingInvoiceTx.invoiceNumber} already recorded for this supplier!`
-                      : `Sales Invoice #${existingInvoiceTx.invoiceNumber} already exists!`}
+                      ? `⚠️ Alert: Purchase Invoice #${existingInvoiceTx.invoiceNumber} already recorded for this supplier!`
+                      : `⚠️ Alert: Sales Invoice #${existingInvoiceTx.invoiceNumber} already exists!`}
                   </p>
                   <p className="text-[11px] text-rose-300/80 mt-0.5">
                     Recorded on {formatDate(existingInvoiceTx.transactionDate)} ({fmtINR(existingInvoiceTx.totalAmount)}) for <strong className="text-white">{existingInvoiceTx.partyName}</strong>.
@@ -383,7 +389,10 @@ export default function LedgerEntryForm({ parties }) {
               </div>
             )}
             {!existingInvoiceTx && errors.invoiceNumber && (
-              <p className="text-rose-400 text-xs mt-1">{errors.invoiceNumber}</p>
+              <div className="flex items-center gap-1.5 text-rose-400 text-xs mt-1.5 bg-rose-500/10 border border-rose-500/20 px-2 py-1 rounded-lg">
+                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                <span>{errors.invoiceNumber}</span>
+              </div>
             )}
           </div>
 

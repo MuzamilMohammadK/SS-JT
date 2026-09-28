@@ -105,10 +105,21 @@ function TxRow({ tx, partyName, uid }) {
         <td className="table-td text-slate-400 text-xs font-medium whitespace-nowrap num">{fmtDate(tx.transactionDate)}</td>
         <td className="table-td">
           {tx.invoiceNumber ? (
-            <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-indigo-300 bg-indigo-500/15 px-2 py-0.5 rounded border border-indigo-500/25">
-              <FileText className="w-3 h-3 text-indigo-400" />
-              {tx.invoiceNumber}
-            </span>
+            <div className="flex flex-col gap-1 items-start">
+              <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-indigo-300 bg-indigo-500/15 px-2 py-0.5 rounded border border-indigo-500/25">
+                <FileText className="w-3 h-3 text-indigo-400" />
+                {tx.invoiceNumber}
+              </span>
+              {tx.notes && (
+                <span
+                  className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-300 bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 rounded cursor-help"
+                  title={`Alert: ${tx.notes}`}
+                >
+                  <Bell className="w-2.5 h-2.5 text-amber-400 flex-shrink-0 animate-pulse" />
+                  <span className="truncate max-w-[110px]">{tx.notes}</span>
+                </span>
+              )}
+            </div>
           ) : (
             <span className="text-slate-600 text-xs">—</span>
           )}
