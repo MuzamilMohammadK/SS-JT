@@ -5,7 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import {
   CheckCircle2, Clock, Loader2, FileText, ChevronDown, ChevronUp,
   IndianRupee, Filter, Trash2, AlertTriangle, Search, X,
-  ArrowUpRight, ArrowDownLeft, RotateCcw,
+  ArrowUpRight, ArrowDownLeft, RotateCcw, Bell,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -164,9 +164,13 @@ function TxRow({ tx, partyName, uid }) {
               ))}
             </div>
             {tx.notes && (
-              <p className="mt-3 text-slate-500 text-xs italic border-t border-slate-800/60 pt-2">
-                📝 {tx.notes}
-              </p>
+              <div className="mt-3 flex items-start gap-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs">
+                <Bell className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold text-amber-400">Alert: </span>
+                  <span className="text-amber-200/90">{tx.notes}</span>
+                </div>
+              </div>
             )}
           </td>
         </tr>
@@ -237,7 +241,7 @@ export default function LedgerTable({ transactions, parties, loading }) {
         <div className="relative">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
           <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by party name or notes…"
+            placeholder="Search by party name or alerts…"
             className="input-base pl-10 pr-9 py-2 text-xs" />
           {search && (
             <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors">

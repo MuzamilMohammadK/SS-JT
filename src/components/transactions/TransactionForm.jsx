@@ -7,7 +7,7 @@ import { validatePositive, normalizeInvoiceNumber } from "../../utils/validators
 import {
   Plus, Trash2, Receipt, IndianRupee, ShoppingBag,
   ChevronDown, ChevronUp, ArrowUpRight, ArrowDownLeft, RotateCcw, FileText,
-  AlertCircle, CheckCircle2,
+  AlertCircle, CheckCircle2, Bell,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -402,13 +402,16 @@ export default function TransactionForm({ parties }) {
           </div>
         </div>
 
-        {/* Notes */}
+        {/* Alerts */}
         <div className="field">
-          <label htmlFor="tx-notes" className="label">Notes (Optional)</label>
+          <label htmlFor="tx-notes" className="label flex items-center gap-1.5 text-amber-300">
+            <Bell className="w-3.5 h-3.5 text-amber-400" />
+            <span>Alerts (optional)</span>
+          </label>
           <textarea id="tx-notes" rows={2} value={form.notes}
             onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-            placeholder="Additional notes about this transaction…"
-            className="input-base resize-none" />
+            placeholder="Payment reminder, delivery deadline, cheque alerts, remarks…"
+            className="input-base resize-none border-amber-500/20 focus:border-amber-500/50" />
         </div>
 
         <div className="flex justify-end">

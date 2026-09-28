@@ -10,7 +10,7 @@ import {
   Plus, Trash2, Receipt, IndianRupee, ShoppingBag,
   ChevronDown, ChevronUp, Calculator, Users,
   ArrowUpRight, ArrowDownLeft, RotateCcw, FileText,
-  AlertCircle, CheckCircle2,
+  AlertCircle, CheckCircle2, Bell,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -285,6 +285,7 @@ export default function LedgerEntryForm({ parties }) {
         paymentLogs:     initialLogs,
         transactionDate: form.transactionDate,
         notes:           form.notes.trim(),
+        alert:           form.notes.trim(),
         createdAt:       serverTimestamp(),
         settledAt:       status === "Settled" ? serverTimestamp() : null,
       });
@@ -593,12 +594,15 @@ export default function LedgerEntryForm({ parties }) {
         )}
       </div>
 
-      {/* ── Notes (optional) ── */}
+      {/* ── Alerts (optional) ── */}
       <div className="field">
-        <label htmlFor="le-notes" className="label">Notes (optional)</label>
+        <label htmlFor="le-notes" className="label flex items-center gap-1.5 text-amber-300">
+          <Bell className="w-3.5 h-3.5 text-amber-400" />
+          <span>Alerts (optional)</span>
+        </label>
         <textarea id="le-notes" rows={2} value={form.notes} onChange={setTop("notes")}
-          placeholder="Delivery details, cheque number, remarks…"
-          className="input-base resize-none" />
+          placeholder="Payment reminder, delivery deadline, cheque alerts, remarks…"
+          className="input-base resize-none border-amber-500/20 focus:border-amber-500/50" />
       </div>
 
       {/* ── Actions ── */}
