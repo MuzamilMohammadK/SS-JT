@@ -1910,8 +1910,11 @@ export default function TransactionHistoryTable({ transactions, loading, error }
                             <span className="text-slate-600 text-xs">—</span>
                           )}
                         </td>
-                        <td className="table-td cursor-pointer" onClick={() => handleAction(tx.id, "details")}>
-                          <p className="text-slate-200 font-semibold text-sm hover:text-indigo-300 transition-colors">{tx.partyName}</p>
+                        <td
+                          className={tx.status === "Settled" ? "table-td" : "table-td cursor-pointer"}
+                          onClick={tx.status === "Settled" ? undefined : () => handleAction(tx.id, "details")}
+                        >
+                          <p className={`font-semibold text-sm ${tx.status === "Settled" ? "text-slate-200" : "text-slate-200 hover:text-indigo-300 transition-colors"}`}>{tx.partyName}</p>
                           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                             {totalSarees > 0 && (
                               <span className="text-[10px] text-indigo-300 font-semibold bg-indigo-500/10 px-1.5 py-0.2 rounded">
@@ -1937,73 +1940,77 @@ export default function TransactionHistoryTable({ transactions, loading, error }
                         <td className="table-td"><StatusBadge status={tx.status} /></td>
                         <td className="table-td text-center">
                           <div className="flex items-center justify-center gap-1">
-                            {/* Details Button */}
-                            <button
-                              type="button"
-                              onClick={() => handleAction(tx.id, "details")}
-                              className={`btn-icon ${isExpanded && expandedTab === "details" ? "text-indigo-400 bg-indigo-500/20" : ""}`}
-                              title="View details & terms"
-                            >
-                              <Eye className="w-3.5 h-3.5" />
-                            </button>
-                            {/* Edit Sarees / Add Items Button with Pencil */}
-                            <button
-                              type="button"
-                              onClick={() => handleAction(tx.id, "editItems")}
-                              className={`btn-icon ${isExpanded && expandedTab === "editItems" ? "text-indigo-400 bg-indigo-500/20" : ""}`}
-                              title="Edit sarees count / Add items"
-                            >
-                              <Pencil className="w-3.5 h-3.5 text-indigo-400" />
-                            </button>
-                            {/* Calendar Button */}
-                            <button
-                              type="button"
-                              onClick={() => handleAction(tx.id, "calendar")}
-                              className={`btn-icon ${isExpanded && expandedTab === "calendar" ? "text-indigo-400 bg-indigo-500/20" : ""}`}
-                              title="Change date"
-                            >
-                              <CalendarDays className="w-3.5 h-3.5" />
-                            </button>
-                            {/* Return Button */}
-                            {canReturn(tx) && (
-                              <button
-                                type="button"
-                                onClick={() => handleAction(tx.id, "return")}
-                                className={`p-2 rounded-lg text-amber-500 hover:text-amber-300 hover:bg-amber-500/10 transition-all duration-150 ${
-                                  isExpanded && expandedTab === "return" ? "bg-amber-500/20 text-amber-300" : ""
-                                }`}
-                                title="Record return"
-                              >
-                                <RotateCcw className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                            {/* Settle Button */}
-                            {tx.status === "Pending" && (
-                              <button
-                                type="button"
-                                onClick={() => handleAction(tx.id, "settle")}
-                                className={`btn-emerald text-xs py-1.5 px-2.5 ${
-                                  isExpanded && expandedTab === "settle" ? "ring-2 ring-emerald-400 ring-offset-1 ring-offset-slate-900" : ""
-                                }`}
-                              >
-                                <CreditCard className="w-3 h-3" /> Settle
-                              </button>
-                            )}
-                            {/* Delete Settled Transaction Button */}
-                            {tx.status === "Settled" && (
+                            {tx.status === "Settled" ? (
+                              /* ONLY delete button for settled transactions */
                               <button
                                 type="button"
                                 onClick={() => setDeleteConfirmTx(tx)}
-                                className="btn-icon text-rose-400 hover:text-rose-200 hover:bg-rose-500/20 transition-all duration-150"
+                                className="btn-danger text-xs py-1.5 px-3 flex items-center gap-1.5 shadow-sm"
                                 title="Delete settled transaction"
                               >
-                                <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>Delete</span>
                               </button>
+                            ) : (
+                              <>
+                                {/* Details Button */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleAction(tx.id, "details")}
+                                  className={`btn-icon ${isExpanded && expandedTab === "details" ? "text-indigo-400 bg-indigo-500/20" : ""}`}
+                                  title="View details & terms"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                </button>
+                                {/* Edit Sarees / Add Items Button with Pencil */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleAction(tx.id, "editItems")}
+                                  className={`btn-icon ${isExpanded && expandedTab === "editItems" ? "text-indigo-400 bg-indigo-500/20" : ""}`}
+                                  title="Edit sarees count / Add items"
+                                >
+                                  <Pencil className="w-3.5 h-3.5 text-indigo-400" />
+                                </button>
+                                {/* Calendar Button */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleAction(tx.id, "calendar")}
+                                  className={`btn-icon ${isExpanded && expandedTab === "calendar" ? "text-indigo-400 bg-indigo-500/20" : ""}`}
+                                  title="Change date"
+                                >
+                                  <CalendarDays className="w-3.5 h-3.5" />
+                                </button>
+                                {/* Return Button */}
+                                {canReturn(tx) && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAction(tx.id, "return")}
+                                    className={`p-2 rounded-lg text-amber-500 hover:text-amber-300 hover:bg-amber-500/10 transition-all duration-150 ${
+                                      isExpanded && expandedTab === "return" ? "bg-amber-500/20 text-amber-300" : ""
+                                    }`}
+                                    title="Record return"
+                                  >
+                                    <RotateCcw className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                                {/* Settle Button */}
+                                {tx.status === "Pending" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAction(tx.id, "settle")}
+                                    className={`btn-emerald text-xs py-1.5 px-2.5 ${
+                                      isExpanded && expandedTab === "settle" ? "ring-2 ring-emerald-400 ring-offset-1 ring-offset-slate-900" : ""
+                                    }`}
+                                  >
+                                    <CreditCard className="w-3 h-3" /> Settle
+                                  </button>
+                                )}
+                              </>
                             )}
                           </div>
                         </td>
                       </tr>
-                      {isExpanded && (
+                      {isExpanded && tx.status !== "Settled" && (
                         <tr key={`${tx.id}-detail`}>
                           <td colSpan={9} className="p-0">
                             <DetailDrawer
@@ -2033,10 +2040,12 @@ export default function TransactionHistoryTable({ transactions, loading, error }
               const isExpanded = expandedId === tx.id;
               return (
                 <div key={tx.id} className="card overflow-hidden border border-slate-800/80 hover:border-slate-700 transition-all">
-                  {/* Tap card body/header to toggle details */}
+                  {/* Tap card body/header to toggle details (disabled for settled transactions) */}
                   <div
-                    onClick={() => handleAction(tx.id, "details")}
-                    className="p-3.5 sm:p-4 cursor-pointer select-none active:bg-slate-800/40 transition-colors"
+                    onClick={tx.status === "Settled" ? undefined : () => handleAction(tx.id, "details")}
+                    className={`p-3.5 sm:p-4 select-none transition-colors ${
+                      tx.status === "Settled" ? "" : "cursor-pointer active:bg-slate-800/40"
+                    }`}
                   >
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <div className="min-w-0 flex-1">
@@ -2064,37 +2073,40 @@ export default function TransactionHistoryTable({ transactions, loading, error }
                         </div>
                       </div>
 
-                      {/* Top Corner: Badges + Pencil Edit Button */}
+                      {/* Top Corner: Badges + Pencil Edit Button (Edit hidden for settled) */}
                       <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
                         <div className="flex items-center gap-1">
                           <TypeBadge type={tx.type} />
                           <StatusBadge status={tx.status} />
                         </div>
-                        {/* Pencil Edit button in the top corner! */}
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); handleAction(tx.id, "editItems"); }}
-                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold transition-all ${
-                            isExpanded && expandedTab === "editItems"
-                              ? "bg-indigo-600 text-white shadow-sm ring-1 ring-indigo-400"
-                              : "bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/25 active:scale-95"
-                          }`}
-                          title="Edit sarees count / Add items"
-                        >
-                          <Pencil className="w-3 h-3 text-indigo-400" />
-                          <span>Edit / Add Items</span>
-                        </button>
+                        {tx.status !== "Settled" && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleAction(tx.id, "editItems"); }}
+                            className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+                              isExpanded && expandedTab === "editItems"
+                                ? "bg-indigo-600 text-white shadow-sm ring-1 ring-indigo-400"
+                                : "bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/25 active:scale-95"
+                            }`}
+                            title="Edit sarees count / Add items"
+                          >
+                            <Pencil className="w-3 h-3 text-indigo-400" />
+                            <span>Edit / Add Items</span>
+                          </button>
+                        )}
                       </div>
                     </div>
 
-                    {/* Tap hint */}
-                    <p className="text-[11px] text-indigo-400/90 font-medium mb-3 flex items-center gap-1">
-                      {isExpanded ? (
-                        <span>▲ Tap card to hide</span>
-                      ) : (
-                        <span>▼ Tap card to view details & terms</span>
-                      )}
-                    </p>
+                    {/* Tap hint only for non-settled transactions */}
+                    {tx.status !== "Settled" && (
+                      <p className="text-[11px] text-indigo-400/90 font-medium mb-3 flex items-center gap-1">
+                        {isExpanded ? (
+                          <span>▲ Tap card to hide</span>
+                        ) : (
+                          <span>▼ Tap card to view details & terms</span>
+                        )}
+                      </p>
+                    )}
 
                     <div className="grid grid-cols-3 gap-1.5 text-center mb-3">
                       <div className="bg-slate-800/60 rounded-xl p-1.5 min-w-0">
@@ -2124,81 +2136,84 @@ export default function TransactionHistoryTable({ transactions, loading, error }
 
                     {/* Mobile action buttons */}
                     <div className="flex gap-2">
-                      {/* Details */}
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); handleAction(tx.id, "details"); }}
-                        className={`btn-secondary flex-1 text-xs py-2 gap-1.5 ${
-                          isExpanded && expandedTab === "details" ? "bg-indigo-600/25 border-indigo-500/50 text-indigo-300" : ""
-                        }`}
-                      >
-                        {isExpanded && expandedTab === "details" ? <ChevronUp className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                        {isExpanded && expandedTab === "details" ? "Hide" : "Details"}
-                      </button>
-                      {/* Edit Sarees Pencil button */}
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); handleAction(tx.id, "editItems"); }}
-                        className={`btn-secondary text-xs py-2 px-3 ${
-                          isExpanded && expandedTab === "editItems" ? "bg-indigo-600 border-indigo-500 text-white" : ""
-                        }`}
-                        title="Edit sarees count / Add items"
-                      >
-                        <Pencil className="w-3.5 h-3.5 text-indigo-400" />
-                      </button>
-                      {/* Calendar */}
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); handleAction(tx.id, "calendar"); }}
-                        className={`btn-secondary text-xs py-2 px-3 ${
-                          isExpanded && expandedTab === "calendar" ? "bg-indigo-600 border-indigo-500 text-white" : ""
-                        }`}
-                        title="Change date"
-                      >
-                        <CalendarDays className="w-3.5 h-3.5" />
-                      </button>
-                      {/* Return */}
-                      {canReturn(tx) && (
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); handleAction(tx.id, "return"); }}
-                          className={`text-xs py-2 px-3 rounded-xl border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 transition-all ${
-                            isExpanded && expandedTab === "return" ? "bg-amber-600 border-amber-500 text-white" : ""
-                          }`}
-                          title="Record return"
-                        >
-                          <RotateCcw className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                      {/* Settle */}
-                      {tx.status === "Pending" && (
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); handleAction(tx.id, "settle"); }}
-                          className={`btn-emerald flex-1 text-xs py-2 ${
-                            isExpanded && expandedTab === "settle" ? "ring-2 ring-emerald-400 ring-offset-2 ring-offset-slate-900" : ""
-                          }`}
-                        >
-                          <CreditCard className="w-3 h-3" /> Settle
-                        </button>
-                      )}
-                      {/* Delete Settled Transaction */}
-                      {tx.status === "Settled" && (
+                      {tx.status === "Settled" ? (
+                        /* ONLY delete button for settled transactions */
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); setDeleteConfirmTx(tx); }}
-                          className="btn-secondary text-xs py-2 px-3 border-rose-500/30 text-rose-400 hover:bg-rose-500/20 transition-all flex items-center gap-1.5"
+                          className="btn-danger w-full text-xs py-2 px-3 flex items-center justify-center gap-1.5 shadow-sm"
                           title="Delete settled transaction"
                         >
-                          <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                          <Trash2 className="w-3.5 h-3.5" />
                           <span>Delete</span>
                         </button>
+                      ) : (
+                        <>
+                          {/* Details */}
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleAction(tx.id, "details"); }}
+                            className={`btn-secondary flex-1 text-xs py-2 gap-1.5 ${
+                              isExpanded && expandedTab === "details" ? "bg-indigo-600/25 border-indigo-500/50 text-indigo-300" : ""
+                            }`}
+                          >
+                            {isExpanded && expandedTab === "details" ? <ChevronUp className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                            {isExpanded && expandedTab === "details" ? "Hide" : "Details"}
+                          </button>
+                          {/* Edit Sarees Pencil button */}
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleAction(tx.id, "editItems"); }}
+                            className={`btn-secondary text-xs py-2 px-3 ${
+                              isExpanded && expandedTab === "editItems" ? "bg-indigo-600 border-indigo-500 text-white" : ""
+                            }`}
+                            title="Edit sarees count / Add items"
+                          >
+                            <Pencil className="w-3.5 h-3.5 text-indigo-400" />
+                          </button>
+                          {/* Calendar */}
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleAction(tx.id, "calendar"); }}
+                            className={`btn-secondary text-xs py-2 px-3 ${
+                              isExpanded && expandedTab === "calendar" ? "bg-indigo-600 border-indigo-500 text-white" : ""
+                            }`}
+                            title="Change date"
+                          >
+                            <CalendarDays className="w-3.5 h-3.5" />
+                          </button>
+                          {/* Return */}
+                          {canReturn(tx) && (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); handleAction(tx.id, "return"); }}
+                              className={`text-xs py-2 px-3 rounded-xl border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 transition-all ${
+                                isExpanded && expandedTab === "return" ? "bg-amber-600 border-amber-500 text-white" : ""
+                              }`}
+                              title="Record return"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          {/* Settle */}
+                          {tx.status === "Pending" && (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); handleAction(tx.id, "settle"); }}
+                              className={`btn-emerald flex-1 text-xs py-2 ${
+                                isExpanded && expandedTab === "settle" ? "ring-2 ring-emerald-400 ring-offset-2 ring-offset-slate-900" : ""
+                              }`}
+                            >
+                              <CreditCard className="w-3 h-3" /> Settle
+                            </button>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
 
                   {/* Inline drawer directly in the card */}
-                  {isExpanded && (
+                  {isExpanded && tx.status !== "Settled" && (
                     <div className="border-t border-slate-800 bg-slate-950/70">
                       <DetailDrawer
                         tx={tx}
