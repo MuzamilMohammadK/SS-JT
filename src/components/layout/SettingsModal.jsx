@@ -7,6 +7,8 @@ import {
   updatePassword,
   verifyBeforeUpdateEmail,
 } from "firebase/auth";
+import { collection, getDocs, writeBatch } from "firebase/firestore";
+import { db } from "../../services/firebase";
 import { useAuth } from "../../context/AuthContext";
 import {
   X,
@@ -25,6 +27,8 @@ import {
   RefreshCw,
   ArrowLeft,
   Info,
+  Trash2,
+  AlertTriangle,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -56,6 +60,13 @@ export default function SettingsModal({ isOpen, onClose }) {
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordError, setPasswordError] = useState("");
 
+  // Reset all data state
+  const [resetConfirmInput, setResetConfirmInput] = useState("");
+  const [resetLoading,      setResetLoading]      = useState(false);
+  const [resetError,        setResetError]        = useState("");
+
+  const isResetMatch = resetConfirmInput.trim().toLowerCase() === "delete all";
+
   // Reset states on open/close
   useEffect(() => {
     if (isOpen) {
@@ -70,6 +81,8 @@ export default function SettingsModal({ isOpen, onClose }) {
       setNewPassword("");
       setConfirmPassword("");
       setPasswordError("");
+      setResetConfirmInput("");
+      setResetError("");
     }
   }, [isOpen]);
 
@@ -83,6 +96,52 @@ export default function SettingsModal({ isOpen, onClose }) {
   }, [isOpen, onClose]);
 
   if (!isOpen || !currentUser) return null;
+
+  // ── Handle Reset All Data ─────────────────────────────────────
+  const handleResetAllData = async (e) => {
+    if (e) e.preventDefault();
+    if (!isResetMatch) {
+      setResetError('Please type "delete all" to confirm.');
+      return;
+    }
+    if (!currentUser?.uid) return;
+
+    setResetLoading(true);
+    setResetError("");
+
+    try {
+      const uid = currentUser.uid;
+      const txRef = collection(db, "users", uid, "transactions");
+      const partiesRef = collection(db, "users", uid, "parties");
+
+      const [txSnap, partiesSnap] = await Promise.all([
+        getDocs(txRef),
+        getDocs(partiesRef),
+      ]);
+
+      const allDocs = [...txSnap.docs, ...partiesSnap.docs];
+
+      if (allDocs.length > 0) {
+        // Delete in batches of 400
+        for (let i = 0; i < allDocs.length; i += 400) {
+          const batch = writeBatch(db);
+          const chunk = allDocs.slice(i, i + 400);
+          chunk.forEach((d) => batch.delete(d.ref));
+          await batch.commit();
+        }
+      }
+
+      toast.success("All data (transactions and parties) deleted successfully.");
+      setResetConfirmInput("");
+      onClose();
+    } catch (err) {
+      console.error("Reset all data error:", err);
+      setResetError(err.message || "Failed to delete all data. Please try again.");
+      toast.error("Failed to delete all data.");
+    } finally {
+      setResetLoading(false);
+    }
+  };
 
   // ── Handle Logout ─────────────────────────────────────────────
   const handleLogout = async () => {
@@ -300,27 +359,44 @@ export default function SettingsModal({ isOpen, onClose }) {
           <button
             type="button"
             onClick={() => setActiveTab("email")}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold transition-all ${
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all ${
               activeTab === "email"
                 ? "bg-indigo-600 text-white shadow-sm"
                 : "text-slate-400 hover:text-slate-200"
             }`}
           >
             <Mail className="w-3.5 h-3.5" />
-            <span>Change Email</span>
+            <span>Email</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab("password")}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold transition-all ${
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all ${
               activeTab === "password"
                 ? "bg-indigo-600 text-white shadow-sm"
                 : "text-slate-400 hover:text-slate-200"
             }`}
           >
             <KeyRound className="w-3.5 h-3.5" />
-            <span>Change Password</span>
+            <span>Password</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab("reset");
+              setResetConfirmInput("");
+              setResetError("");
+            }}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+              activeTab === "reset"
+                ? "bg-rose-600 text-white shadow-sm"
+                : "text-rose-400/90 hover:text-rose-300 hover:bg-rose-500/10"
+            }`}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Reset All</span>
           </button>
         </div>
 
@@ -671,6 +747,130 @@ export default function SettingsModal({ isOpen, onClose }) {
               </button>
             </div>
           </form>
+        )}
+
+        {/* ── Tab 3: Reset All Data ── */}
+        {activeTab === "reset" && (
+          <form onSubmit={handleResetAllData} className="space-y-4 animate-fade-in">
+            <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/25 flex flex-col items-center text-center">
+              <div className="w-12 h-12 rounded-2xl bg-rose-500/20 text-rose-400 flex items-center justify-center mb-3 shadow-inner">
+                <AlertTriangle className="w-6 h-6 animate-pulse" />
+              </div>
+              <h3 className="text-slate-100 font-bold text-base mb-1">
+                Reset All Application Data
+              </h3>
+              <p className="text-slate-300 text-xs max-w-xs">
+                Permanently erase all registered parties, saree inventory records, and ledger transactions.
+              </p>
+            </div>
+
+            <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs space-y-1">
+              <p className="font-bold flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                <span>Irreversible Action</span>
+              </p>
+              <p className="text-rose-200/90 text-[11px]">
+                Once confirmed, all data will be permanently wiped from the database and cannot be recovered.
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="settings-reset-confirm" className="label text-xs mb-1.5 block">
+                To confirm, type <strong className="font-mono bg-rose-500/20 text-rose-300 font-bold px-1.5 py-0.5 rounded border border-rose-500/30 select-all">delete all</strong> below:
+              </label>
+              <input
+                id="settings-reset-confirm"
+                type="text"
+                value={resetConfirmInput}
+                onChange={(e) => {
+                  setResetConfirmInput(e.target.value);
+                  if (resetError) setResetError("");
+                }}
+                placeholder='Type "delete all"'
+                className="input-base text-sm font-mono border-rose-500/40 focus:border-rose-500 focus:ring-rose-500/25"
+                autoComplete="off"
+                autoFocus
+              />
+              <div className="mt-1.5 flex items-center justify-between text-[11px]">
+                {isResetMatch ? (
+                  <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Confirmation matched. Click Confirm to delete all data.
+                  </span>
+                ) : (
+                  <span className="text-slate-500">
+                    Type <strong>delete all</strong> to enable the Confirm button.
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {resetError && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
+                <span>{resetError}</span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setResetConfirmInput("");
+                  setResetError("");
+                  setActiveTab("email");
+                }}
+                className="btn-secondary text-xs px-4 py-2"
+                disabled={resetLoading}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={!isResetMatch || resetLoading}
+                className="btn-danger text-xs px-4 py-2 flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {resetLoading ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting all data…</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Confirm</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* ── Danger Zone: Reset All Data (Quick Action) ── */}
+        {activeTab !== "reset" && (
+          <div className="p-3 mt-5 rounded-xl bg-rose-500/5 border border-rose-500/20 flex items-center justify-between gap-3">
+            <div className="min-w-0 pr-2">
+              <p className="text-rose-300 text-xs font-bold flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 text-rose-400 flex-shrink-0" />
+                <span>Reset All Data</span>
+              </p>
+              <p className="text-slate-400 text-[11px] truncate">
+                Erase all parties, transactions, and inventory
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("reset");
+                setResetConfirmInput("");
+                setResetError("");
+              }}
+              className="btn-danger text-xs py-1.5 px-3 flex items-center gap-1 flex-shrink-0"
+              title="Reset all data"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Reset All</span>
+            </button>
+          </div>
         )}
 
         {/* ── Logout Section (Inside Settings) ── */}
