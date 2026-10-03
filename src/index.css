@@ -183,24 +183,32 @@
            bg-slate-900/95 backdrop-blur-xl
            border-t border-slate-800/80
            shadow-2xl shadow-black/60
-           flex items-center justify-around
+           flex items-center
            md:hidden;
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   .bottom-nav-item {
     @apply flex flex-col items-center justify-center gap-0.5
-           flex-1 py-2 px-1 text-slate-500
-           transition-all duration-200 cursor-pointer;
-    min-height: 56px;
+           py-1.5 px-2.5 text-slate-400
+           transition-all duration-200 cursor-pointer rounded-xl flex-shrink-0;
+    min-height: 52px;
   }
   .bottom-nav-item.active {
-    @apply text-indigo-400;
+    @apply text-indigo-300 bg-indigo-600/15 border border-indigo-500/30;
   }
   .bottom-nav-item:not(.active):hover {
-    @apply text-slate-300;
+    @apply text-slate-200 bg-slate-800/50;
   }
   .bottom-nav-label {
-    @apply text-[10px] font-semibold tracking-wide;
+    @apply text-[10px] font-semibold tracking-wide whitespace-nowrap;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
 
   /* ── Page wrapper (accounts for bottom nav on mobile) */

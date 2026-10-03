@@ -11,6 +11,7 @@ import RegisteredPartiesPage from "./pages/RegisteredPartiesPage";
 import LedgerPage            from "./pages/LedgerPage";
 import HistoryPage           from "./pages/HistoryPage";
 import AnalyticsPage         from "./pages/AnalyticsPage";
+import DuesPage              from "./pages/DuesPage";
 
 // PWA service-worker hook
 import { usePWA } from "./hooks/usePWA";
@@ -55,6 +56,7 @@ export default function App() {
           <Route path="/registered-parties" element={<ProtectedRoute><RegisteredPartiesPage /></ProtectedRoute>} />
           <Route path="/ledger"             element={<ProtectedRoute><LedgerPage /></ProtectedRoute>} />
           <Route path="/history"            element={<ProtectedRoute><HistoryPage /></ProtectedRoute>} />
+          <Route path="/dues"               element={<ProtectedRoute><DuesPage /></ProtectedRoute>} />
           <Route path="/analytics"          element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
 
           {/* Default → Parties */}

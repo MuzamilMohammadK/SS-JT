@@ -1,11 +1,9 @@
 import { useAuth } from "../context/AuthContext";
 import { useTransactions } from "../hooks/useTransactions";
-import { useParties } from "../hooks/useParties";
 import ReceivablePayableBar from "../components/analytics/ReceivablePayableBar";
-import PartyDuesChart from "../components/analytics/PartyDuesChart";
 import AppShell from "../components/layout/AppShell";
 import { fmtINR } from "../utils/validators";
-import { BarChart3, TrendingUp, Receipt, Loader2, AlertCircle } from "lucide-react";
+import { BarChart3, TrendingUp, Loader2, AlertCircle } from "lucide-react";
 import { useMemo } from "react";
 
 // Quick stat pill
@@ -27,10 +25,9 @@ function StatPill({ label, value, color = "indigo" }) {
 export default function AnalyticsPage() {
   const { currentUser } = useAuth();
   const { transactions = [], loading: txLoading, error: txError } = useTransactions(currentUser?.uid);
-  const { parties = [],      loading: pLoading,  error: pError }   = useParties(currentUser?.uid);
 
-  const loading = txLoading || pLoading;
-  const error   = txError || pError;
+  const loading = txLoading;
+  const error   = txError;
 
   const stats = useMemo(() => {
     const list        = transactions || [];
@@ -82,15 +79,6 @@ export default function AnalyticsPage() {
                 <h2 className="section-title text-sm">Receivables & Payables</h2>
               </div>
               <ReceivablePayableBar transactions={transactions} />
-            </div>
-
-            {/* Party-wise dues */}
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <Receipt className="w-4 h-4 text-slate-500" />
-                <h2 className="section-title text-sm">Pending Dues by Party</h2>
-              </div>
-              <PartyDuesChart transactions={transactions} parties={parties} />
             </div>
           </div>
         )}

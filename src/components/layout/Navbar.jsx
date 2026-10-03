@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
-import { LogOut, Menu, X, Download, Users, Receipt, BookOpen, BarChart3, Building2, Settings } from "lucide-react";
+import { LogOut, Menu, X, Download, Users, Receipt, BookOpen, BarChart3, Building2, Settings, Landmark } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { usePWAInstall } from "../../hooks/usePWAInstall";
 import InstallModal from "./InstallModal";
@@ -12,6 +12,7 @@ const DESKTOP_NAV = [
   { to: "/registered-parties", icon: Building2, label: "Registered Parties" },
   { to: "/ledger",             icon: Receipt,   label: "Ledger"    },
   { to: "/history",            icon: BookOpen,  label: "History"   },
+  { to: "/dues",               icon: Landmark,  label: "Dues"      },
   { to: "/analytics",          icon: BarChart3, label: "Analytics" },
 ];
 
@@ -129,6 +130,27 @@ export default function Navbar() {
               <span className="text-slate-300 text-sm truncate flex-1">{currentUser?.email}</span>
               <Settings className="w-4 h-4 text-indigo-400" />
             </div>
+            {/* Mobile Navigation Links */}
+            <div className="grid grid-cols-2 gap-2 pt-1 pb-1">
+              {DESKTOP_NAV.map(({ to, icon: Icon, label }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  onClick={() => setMenuOpen(false)}
+                  className={({ isActive }) =>
+                    `flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-medium transition-all ${
+                      isActive
+                        ? "bg-indigo-600/25 text-indigo-300 border border-indigo-500/40 font-semibold"
+                        : "text-slate-300 bg-slate-800/40 hover:bg-slate-800 border border-slate-700/40"
+                    }`
+                  }
+                >
+                  <Icon className="w-4 h-4 text-indigo-400" />
+                  <span>{label}</span>
+                </NavLink>
+              ))}
+            </div>
+
             {isInstallable && !isInstalled && (
               <button
                 onClick={() => { setMenuOpen(false); installApp(); }}
