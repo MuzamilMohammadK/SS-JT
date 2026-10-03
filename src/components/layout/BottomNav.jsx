@@ -43,7 +43,11 @@ export default function BottomNav() {
   };
 
   return (
-    <nav className="bottom-nav relative group" aria-label="Mobile navigation">
+    <nav
+      className="fixed bottom-0 left-0 right-0 z-50 bg-slate-900/95 backdrop-blur-xl border-t border-slate-800/80 shadow-2xl shadow-black/60 flex items-center md:hidden"
+      style={{ paddingBottom: "max(env(safe-area-inset-bottom, 0px), 6px)" }}
+      aria-label="Mobile navigation"
+    >
       {/* Slide Left Button */}
       <button
         type="button"
