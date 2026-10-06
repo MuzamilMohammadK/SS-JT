@@ -10,6 +10,7 @@ import {
   AlertCircle, CheckCircle2, Bell,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import OwnerCollectorSelector, { getRegisteredOwners } from "./OwnerCollectorSelector";
 
 // ── Constants ─────────────────────────────────────────────────
 const EMPTY_ROW = { sareeName: "", quantity: "", pricePerUnit: "" };
@@ -21,6 +22,7 @@ function getInitialForm() {
     type:            "Sale",
     sareeDetails:    [{ ...EMPTY_ROW }],
     amountPaid:      "",
+    collectedBy:     "",
     transactionDate: new Date().toISOString().slice(0, 10),
     notes:           "",
   };
@@ -89,6 +91,7 @@ function SareeRow({ index, row, onChange, onRemove, canRemove, errors }) {
 export default function TransactionForm({ parties }) {
   const { currentUser } = useAuth();
   const { transactions = [] } = useTransactions(currentUser?.uid);
+  const registeredOwners = useMemo(() => getRegisteredOwners(parties), [parties]);
   const [form,      setForm]      = useState(getInitialForm);
   const [rowErrors, setRowErrors] = useState([]);
   const [formErrors,setFormErrors]= useState({});
@@ -191,10 +194,13 @@ export default function TransactionForm({ parties }) {
         amount: amountPaidNum,
         date: new Date(form.transactionDate + "T12:00:00").toISOString(),
         type: form.type === "Sale" ? "Initial Receipt from Customer" : "Initial Payment to Supplier",
-        note: "Initial upfront payment",
+        collectedBy: form.collectedBy?.trim() || null,
+        note: form.collectedBy?.trim()
+          ? `Initial upfront payment · Collected by: ${form.collectedBy.trim()}`
+          : "Initial upfront payment",
       }] : [];
 
-      await addDoc(collection(db, "users", currentUser.uid, "transactions"), {
+      const txPayload = {
         partyId:           form.partyId,
         partyName:         partyObj?.name ?? "Unknown",
         invoiceNumber:     form.invoiceNumber.trim(),
@@ -210,9 +216,16 @@ export default function TransactionForm({ parties }) {
         notes:           form.notes.trim(),
         createdAt:       serverTimestamp(),
         settledAt:       pendingDue <= 0 ? serverTimestamp() : null,
-      });
+      };
+      if (form.collectedBy?.trim()) {
+        txPayload.lastCollectedBy = form.collectedBy.trim();
+      }
 
-      toast.success("Transaction recorded successfully!");
+      await addDoc(collection(db, "users", currentUser.uid, "transactions"), txPayload);
+
+      toast.success(
+        `Transaction recorded successfully!${form.collectedBy?.trim() ? ` (Collected by ${form.collectedBy.trim()})` : ""}`
+      );
       setForm(getInitialForm());
       setRowErrors([]);
       setFormErrors({});
@@ -401,6 +414,19 @@ export default function TransactionForm({ parties }) {
             </div>
           </div>
         </div>
+
+        {/* Owner Collector Selection for Upfront Payment */}
+        {amountPaidNum > 0 && (
+          <div className="card p-3.5 bg-slate-800/40 border border-slate-700/60 animate-fade-in">
+            <OwnerCollectorSelector
+              value={form.collectedBy}
+              onChange={(val) => setForm((f) => ({ ...f, collectedBy: val }))}
+              registeredOwners={registeredOwners}
+              id="tx-collector"
+              label={form.type === "Purchase" ? "Amount Paid Out By (Owner)" : "Amount Collected By (Owner)"}
+            />
+          </div>
+        )}
 
         {/* Alerts */}
         <div className="field">

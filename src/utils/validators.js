@@ -23,6 +23,31 @@ export function validateName(value) {
   return null;
 }
 
+export function validateOwnerName(value) {
+  const v = value?.trim() ?? "";
+  if (!v) return null;
+  if (!NAME_REGEX.test(v)) return "Owner name must contain letters and spaces only.";
+  return null;
+}
+
+/** 15-digit / alphanumeric code for Indian GSTIN */
+export const GSTIN_REGEX = /^[0-9A-Za-z]{15}$/;
+
+export function validateGSTIN(value, isCustomer = false) {
+  const v = (value ?? "").trim().toUpperCase();
+  if (!v) {
+    if (isCustomer) return "GSTIN is required for customers.";
+    return null;
+  }
+  if (v.length !== 15) {
+    return "GSTIN must be exactly 15 digits/characters.";
+  }
+  if (!GSTIN_REGEX.test(v)) {
+    return "GSTIN must be 15 alphanumeric characters.";
+  }
+  return null;
+}
+
 export function validateMobile(value) {
   const digits = (value ?? "").replace(/\D/g, "");
   if (!digits)                      return "Mobile number is required.";

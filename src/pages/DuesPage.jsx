@@ -24,7 +24,7 @@ export default function DuesPage() {
             </div>
             <div>
               <h1 className="page-title">Pending Dues</h1>
-              <p className="text-slate-500 text-sm">Outstanding balances grouped by party</p>
+              <p className="text-slate-500 text-sm">Outstanding balances grouped by party · Settle full or close with bargain discount</p>
             </div>
           </div>
         </div>

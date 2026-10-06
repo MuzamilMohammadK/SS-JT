@@ -3,7 +3,12 @@ import { Link } from "react-router-dom";
 import { collection, addDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "../../services/firebase";
 import { useAuth } from "../../context/AuthContext";
-import { validateName, validateMobile } from "../../utils/validators";
+import {
+  validateName,
+  validateMobile,
+  validateGSTIN,
+  validateOwnerName,
+} from "../../utils/validators";
 import PartyEditModal from "./PartyEditModal";
 import {
   UserPlus,
@@ -20,14 +25,18 @@ import {
   Plus,
   MapPin,
   ExternalLink,
+  User,
+  FileText,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
 // ── Helpers ────────────────────────────────────────────────────
 const INITIAL = {
   name: "",
-  mobiles: [""],
+  ownerName: "",
   type: "",
+  gstin: "",
+  mobiles: [""],
   address: "",
   city: "",
   state: "",
@@ -74,11 +83,17 @@ function DeleteConfirm({ partyName, onConfirm, onCancel }) {
 
 // ── Type Badge ────────────────────────────────────────────────
 function TypeBadge({ type }) {
-  return type === "Customer" ? (
-    <span className="badge-indigo">Customer · AR</span>
-  ) : (
-    <span className="badge-rose">Supplier · AP</span>
-  );
+  if (type === "Customer") {
+    return <span className="badge-indigo">Customer · AR</span>;
+  }
+  if (type === "Owner") {
+    return (
+      <span className="badge-emerald text-[10px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-semibold">
+        Owner
+      </span>
+    );
+  }
+  return <span className="badge-rose">Supplier · AP</span>;
 }
 
 // ── Party Card ────────────────────────────────────────────────
@@ -86,6 +101,8 @@ export function PartyCard({ party, onEdit, onDelete }) {
   const avatarGradient =
     party.type === "Customer"
       ? "from-indigo-600 to-purple-600"
+      : party.type === "Owner"
+      ? "from-emerald-600 to-teal-600"
       : "from-rose-600 to-pink-600";
 
   const allMobiles = party.mobiles?.length
@@ -119,6 +136,25 @@ export function PartyCard({ party, onEdit, onDelete }) {
             </p>
             <TypeBadge type={party.type} />
           </div>
+
+          {/* Owner Name */}
+          {party.type !== "Owner" && (party.ownerName || party.owner) && (
+            <p className="text-slate-400 text-xs mt-1 flex items-center gap-1.5 truncate">
+              <User className="w-3 h-3 text-slate-500 flex-shrink-0" />
+              <span>
+                Owner: <strong className="text-slate-300 font-medium">{party.ownerName || party.owner}</strong>
+              </span>
+            </p>
+          )}
+
+          {/* GSTIN */}
+          {party.gstin && (
+            <div className="mt-1 flex items-center gap-1.5">
+              <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-slate-800/90 text-indigo-300 border border-indigo-500/30">
+                GSTIN: {party.gstin}
+              </span>
+            </div>
+          )}
 
           {/* Multiple Mobile Numbers */}
           {allMobiles.length > 0 ? (
@@ -173,7 +209,7 @@ export function PartyCard({ party, onEdit, onDelete }) {
 }
 
 // ── Add Party Form ────────────────────────────────────────────
-export function AddPartyForm({ uid }) {
+export function AddPartyForm({ uid, parties = [] }) {
   const [form, setForm] = useState(INITIAL);
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
@@ -181,6 +217,12 @@ export function AddPartyForm({ uid }) {
   const setField = (k) => (e) => {
     setForm((f) => ({ ...f, [k]: e.target.value }));
     if (errors[k]) setErrors((er) => ({ ...er, [k]: null }));
+  };
+
+  const handleGstinChange = (e) => {
+    const val = e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, "").slice(0, 15);
+    setForm((f) => ({ ...f, gstin: val }));
+    if (errors.gstin) setErrors((er) => ({ ...er, gstin: null }));
   };
 
   const handleMobileChange = (idx, val) => {
@@ -207,8 +249,22 @@ export function AddPartyForm({ uid }) {
 
   const validate = () => {
     const e = {};
-    const ne = validateName(form.name);
-    if (ne) e.name = ne;
+    const nameErr = validateName(form.name);
+    if (nameErr) e.name = nameErr;
+
+    if (!form.type) {
+      e.type = "Please select a party type.";
+      toast.error("Please select a party type (Customer, Supplier, or Owner).");
+    }
+
+    // If Owner is selected, only the name is required — skip all other validations
+    if (form.type === "Owner") {
+      setErrors(e);
+      return Object.keys(e).length === 0;
+    }
+
+    const ownerErr = validateOwnerName(form.ownerName);
+    if (ownerErr) e.ownerName = ownerErr;
 
     // Validate mobiles
     const primaryMob = form.mobiles[0] || "";
@@ -225,10 +281,19 @@ export function AddPartyForm({ uid }) {
       }
     }
 
-    if (!form.type) {
-      e.type = "Please select a party type.";
-      toast.error("Please select a party type (Customer or Supplier).");
+    const cleanGstin = (form.gstin || "").trim().toUpperCase();
+    const gstinErr = validateGSTIN(cleanGstin, form.type === "Customer");
+    if (gstinErr) {
+      e.gstin = gstinErr;
+    } else if (cleanGstin) {
+      const duplicate = parties.find(
+        (p) => p.gstin && p.gstin.trim().toUpperCase() === cleanGstin
+      );
+      if (duplicate) {
+        e.gstin = `This GSTIN is already registered to "${duplicate.name}".`;
+      }
     }
+
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -238,23 +303,29 @@ export function AddPartyForm({ uid }) {
     if (!validate()) return;
     setLoading(true);
 
-    const cleanMobiles = form.mobiles
-      .map((m) => m.replace(/\D/g, ""))
-      .filter(Boolean);
+    const isOwner = form.type === "Owner";
+    const cleanMobiles = isOwner
+      ? []
+      : form.mobiles.map((m) => m.replace(/\D/g, "")).filter(Boolean);
+    const cleanGstin = isOwner ? "" : form.gstin.trim().toUpperCase();
+    const cleanOwner = isOwner ? form.name.trim() : form.ownerName.trim();
 
     try {
       await addDoc(collection(db, "users", uid, "parties"), {
         name: form.name.trim(),
+        ownerName: cleanOwner,
+        owner: cleanOwner,
+        gstin: cleanGstin,
         mobile: cleanMobiles[0] || "",
         mobiles: cleanMobiles,
         type: form.type,
-        address: form.address.trim(),
-        city: form.city.trim(),
-        state: form.state.trim(),
-        pincode: form.pincode.replace(/\D/g, "").slice(0, 6),
+        address: isOwner ? "" : form.address.trim(),
+        city: isOwner ? "" : form.city.trim(),
+        state: isOwner ? "" : form.state.trim(),
+        pincode: isOwner ? "" : form.pincode.replace(/\D/g, "").slice(0, 6),
         createdAt: serverTimestamp(),
       });
-      toast.success(`Party "${form.name.trim()}" added.`);
+      toast.success(`${form.type} "${form.name.trim()}" added.`);
       setForm(INITIAL);
       setErrors({});
     } catch (err) {
@@ -280,17 +351,17 @@ export function AddPartyForm({ uid }) {
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
         {/* Row 1: Name & Type */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Party Name */}
+          {/* Party / Owner Name */}
           <div className="field">
             <label htmlFor="p-name" className="label">
-              Party Name
+              {form.type === "Owner" ? "Owner Name" : "Party Name"}
             </label>
             <input
               id="p-name"
               type="text"
               value={form.name}
               onChange={setField("name")}
-              placeholder="e.g. Ramesh Textiles"
+              placeholder={form.type === "Owner" ? "e.g. Ramesh Bhai" : "e.g. Ramesh Textiles"}
               className={`input-base ${errors.name ? "input-error" : ""}`}
             />
             {errors.name && <p className="text-rose-400 text-xs mt-1">⚠ {errors.name}</p>}
@@ -301,146 +372,219 @@ export function AddPartyForm({ uid }) {
             <label className="label flex items-center gap-1">
               <Tag className="w-3 h-3" /> Party Type
             </label>
-            <div className="flex items-center gap-3 pt-1">
-              <label
-                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border cursor-pointer text-sm font-medium transition-all select-none ${
-                  form.type === "Customer"
+            <div className="flex items-center gap-2 pt-1">
+              {["Customer", "Supplier", "Owner"].map((opt) => {
+                const isSelected = form.type === opt;
+                const activeClass =
+                  opt === "Customer"
                     ? "border-indigo-500 bg-indigo-500/15 text-indigo-300 shadow-sm"
-                    : "border-slate-700/60 bg-slate-800/50 text-slate-400 hover:border-slate-600 hover:text-slate-200"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="partyType"
-                  value="Customer"
-                  checked={form.type === "Customer"}
-                  onChange={(e) => {
-                    setForm((f) => ({ ...f, type: e.target.value }));
-                    if (errors.type) setErrors((er) => ({ ...er, type: null }));
-                  }}
-                  className="w-4 h-4 text-indigo-500 accent-indigo-500 cursor-pointer"
-                />
-                <span>Customer</span>
-              </label>
+                    : opt === "Supplier"
+                    ? "border-rose-500 bg-rose-500/15 text-rose-300 shadow-sm"
+                    : "border-emerald-500 bg-emerald-500/15 text-emerald-300 shadow-sm";
 
-              <label
-                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border cursor-pointer text-sm font-medium transition-all select-none ${
-                  form.type === "Supplier"
-                    ? "border-indigo-500 bg-indigo-500/15 text-indigo-300 shadow-sm"
-                    : "border-slate-700/60 bg-slate-800/50 text-slate-400 hover:border-slate-600 hover:text-slate-200"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="partyType"
-                  value="Supplier"
-                  checked={form.type === "Supplier"}
-                  onChange={(e) => {
-                    setForm((f) => ({ ...f, type: e.target.value }));
-                    if (errors.type) setErrors((er) => ({ ...er, type: null }));
-                  }}
-                  className="w-4 h-4 text-indigo-500 accent-indigo-500 cursor-pointer"
-                />
-                <span>Supplier</span>
-              </label>
+                return (
+                  <label
+                    key={opt}
+                    className={`flex-1 flex items-center justify-center gap-1.5 px-2.5 py-2.5 rounded-xl border cursor-pointer text-xs sm:text-sm font-medium transition-all select-none ${
+                      isSelected
+                        ? activeClass
+                        : "border-slate-700/60 bg-slate-800/50 text-slate-400 hover:border-slate-600 hover:text-slate-200"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="partyType"
+                      value={opt}
+                      checked={isSelected}
+                      onChange={(e) => {
+                        const nextType = e.target.value;
+                        setForm((f) => ({ ...f, type: nextType }));
+                        if (errors.type) setErrors((er) => ({ ...er, type: null }));
+                        if (nextType === "Owner") {
+                          setErrors((er) => ({
+                            ...er,
+                            mobiles: null,
+                            gstin: null,
+                            ownerName: null,
+                          }));
+                        } else if (
+                          nextType === "Supplier" &&
+                          errors.gstin === "GSTIN is required for customers."
+                        ) {
+                          setErrors((er) => ({ ...er, gstin: null }));
+                        }
+                      }}
+                      className="w-4 h-4 accent-indigo-500 cursor-pointer"
+                    />
+                    <span>{opt}</span>
+                  </label>
+                );
+              })}
             </div>
             {errors.type && <p className="text-rose-400 text-xs mt-1.5 font-medium">⚠ {errors.type}</p>}
           </div>
         </div>
 
-        {/* Row 2: Multiple Mobile Numbers */}
-        <div className="field">
-          <div className="flex items-center justify-between mb-1.5">
-            <label className="label mb-0 flex items-center gap-1">
-              <Phone className="w-3 h-3" /> Mobile Numbers
-            </label>
-            <button
-              type="button"
-              onClick={handleAddMobile}
-              className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-semibold transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" /> Add Another Number
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
-            {form.mobiles.map((mob, idx) => (
-              <div key={idx} className="flex items-center gap-1.5">
+        {/* When Owner is selected, hide all other inputs */}
+        {form.type !== "Owner" && (
+          <>
+            {/* Row 2: Owner Name + GSTIN */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Owner Name */}
+              <div className="field">
+                <label htmlFor="p-owner" className="label flex items-center gap-1">
+                  <User className="w-3 h-3 text-slate-400" />
+                  <span>Owner Name</span>
+                  <span className="text-slate-500 font-normal text-xs ml-1">(Optional)</span>
+                </label>
                 <input
-                  type="tel"
-                  inputMode="numeric"
-                  value={mob}
-                  onChange={(e) => handleMobileChange(idx, e.target.value)}
-                  placeholder={idx === 0 ? "Primary mobile (10 digits)" : `Secondary mobile #${idx + 1}`}
-                  maxLength={10}
-                  className="input-base"
+                  id="p-owner"
+                  type="text"
+                  value={form.ownerName}
+                  onChange={setField("ownerName")}
+                  placeholder="e.g. Ramesh Kumar"
+                  className={`input-base ${errors.ownerName ? "input-error" : ""}`}
                 />
-                {form.mobiles.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveMobile(idx)}
-                    className="p-2.5 rounded-xl text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors flex-shrink-0"
-                    title="Remove number"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                {errors.ownerName && (
+                  <p className="mt-1.5 text-rose-400 text-xs font-medium">⚠ {errors.ownerName}</p>
                 )}
               </div>
-            ))}
-          </div>
-          {errors.mobiles && (
-            <p className="text-rose-400 text-xs mt-1.5 font-medium">⚠ {errors.mobiles}</p>
-          )}
-        </div>
 
-        {/* Row 3: Address Details */}
-        <div className="pt-2 border-t border-slate-800 space-y-3">
-          <label className="label flex items-center gap-1">
-            <MapPin className="w-3 h-3" /> Address Details (Optional)
-          </label>
-          <div>
-            <input
-              type="text"
-              value={form.address}
-              onChange={setField("address")}
-              placeholder="Door No., Street, Building, Market or Area"
-              className="input-base text-sm"
-            />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <input
-              type="text"
-              value={form.city}
-              onChange={setField("city")}
-              placeholder="City / Town"
-              className="input-base text-sm"
-            />
-            <input
-              type="text"
-              value={form.state}
-              onChange={setField("state")}
-              placeholder="State"
-              className="input-base text-sm"
-            />
-            <input
-              type="text"
-              inputMode="numeric"
-              value={form.pincode}
-              onChange={(e) => {
-                const val = e.target.value.replace(/\D/g, "").slice(0, 6);
-                setForm((f) => ({ ...f, pincode: val }));
-              }}
-              placeholder="PIN Code (6 digits)"
-              maxLength={6}
-              className="input-base text-sm"
-            />
-          </div>
-        </div>
+              {/* GSTIN */}
+              <div className="field">
+                <div className="flex items-center justify-between mb-1.5">
+                  <label htmlFor="p-gstin" className="label mb-0 flex items-center gap-1">
+                    <FileText className="w-3 h-3 text-slate-400" />
+                    <span>GSTIN</span>
+                    {form.type === "Customer" && (
+                      <span className="text-rose-400 font-bold ml-0.5">*</span>
+                    )}
+                  </label>
+                  <span className="text-[11px] font-medium">
+                    {form.type === "Customer" ? (
+                      <span className="text-amber-400/90 font-semibold">Required for Customers</span>
+                    ) : (
+                      <span className="text-slate-500">Optional for Suppliers</span>
+                    )}
+                  </span>
+                </div>
+                <div className="relative">
+                  <input
+                    id="p-gstin"
+                    type="text"
+                    value={form.gstin}
+                    onChange={handleGstinChange}
+                    placeholder="e.g. 29ABCDE1234F1Z5 (15 digits/chars)"
+                    maxLength={15}
+                    className={`input-base font-mono uppercase tracking-wider pr-14 ${
+                      errors.gstin ? "input-error" : ""
+                    }`}
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-500 font-mono pointer-events-none">
+                    {form.gstin.length}/15
+                  </span>
+                </div>
+                {errors.gstin && (
+                  <p className="mt-1.5 text-rose-400 text-xs font-medium">⚠ {errors.gstin}</p>
+                )}
+              </div>
+            </div>
+
+            {/* Row 3: Multiple Mobile Numbers */}
+            <div className="field">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="label mb-0 flex items-center gap-1">
+                  <Phone className="w-3 h-3" /> Mobile Numbers
+                </label>
+                <button
+                  type="button"
+                  onClick={handleAddMobile}
+                  className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-semibold transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add Another Number
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                {form.mobiles.map((mob, idx) => (
+                  <div key={idx} className="flex items-center gap-1.5">
+                    <input
+                      type="tel"
+                      inputMode="numeric"
+                      value={mob}
+                      onChange={(e) => handleMobileChange(idx, e.target.value)}
+                      placeholder={idx === 0 ? "Primary mobile (10 digits)" : `Secondary mobile #${idx + 1}`}
+                      maxLength={10}
+                      className="input-base"
+                    />
+                    {form.mobiles.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveMobile(idx)}
+                        className="p-2.5 rounded-xl text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors flex-shrink-0"
+                        title="Remove number"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {errors.mobiles && (
+                <p className="text-rose-400 text-xs mt-1.5 font-medium">⚠ {errors.mobiles}</p>
+              )}
+            </div>
+
+            {/* Row 4: Address Details */}
+            <div className="pt-2 border-t border-slate-800 space-y-3">
+              <label className="label flex items-center gap-1">
+                <MapPin className="w-3 h-3" /> Address Details (Optional)
+              </label>
+              <div>
+                <input
+                  type="text"
+                  value={form.address}
+                  onChange={setField("address")}
+                  placeholder="Door No., Street, Building, Market or Area"
+                  className="input-base text-sm"
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <input
+                  type="text"
+                  value={form.city}
+                  onChange={setField("city")}
+                  placeholder="City / Town"
+                  className="input-base text-sm"
+                />
+                <input
+                  type="text"
+                  value={form.state}
+                  onChange={setField("state")}
+                  placeholder="State"
+                  className="input-base text-sm"
+                />
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={form.pincode}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, "").slice(0, 6);
+                    setForm((f) => ({ ...f, pincode: val }));
+                  }}
+                  placeholder="PIN Code (6 digits)"
+                  maxLength={6}
+                  className="input-base text-sm"
+                />
+              </div>
+            </div>
+          </>
+        )}
 
         <div className="flex justify-end pt-2">
           <button type="submit" disabled={loading} className="btn-primary">
             {loading ? <span className="spinner" /> : <UserPlus className="w-4 h-4" />}
-            {loading ? "Adding…" : "Add Party"}
+            {loading ? "Adding…" : form.type === "Owner" ? "Add Owner" : "Add Party"}
           </button>
         </div>
       </form>
@@ -460,11 +604,15 @@ export default function PartyManager({ parties, loading, error }) {
   const filtered = parties.filter((p) => {
     const q = search.trim().toLowerCase();
     if (!q) return true;
-    const nameMatch = p.name.toLowerCase().includes(q);
+    const nameMatch = p.name?.toLowerCase().includes(q);
+    const ownerMatch =
+      (p.ownerName && p.ownerName.toLowerCase().includes(q)) ||
+      (p.owner && p.owner.toLowerCase().includes(q));
+    const gstinMatch = p.gstin && p.gstin.toLowerCase().includes(q);
     const mobMatch =
       p.mobiles?.some((m) => m.includes(q)) || (p.mobile && p.mobile.includes(q));
     const cityMatch = p.city?.toLowerCase().includes(q);
-    return nameMatch || mobMatch || cityMatch;
+    return nameMatch || ownerMatch || gstinMatch || mobMatch || cityMatch;
   });
 
   const handleDeleteConfirm = async () => {
@@ -502,7 +650,7 @@ export default function PartyManager({ parties, loading, error }) {
         />
       )}
 
-      <AddPartyForm uid={uid} />
+      <AddPartyForm uid={uid} parties={parties} />
 
       {/* Section header: Recent 5 Parties + View All Link */}
       <div className="mt-8 flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">

@@ -9,9 +9,10 @@ import {
   Search, X, BookOpen, ArrowUpRight, ArrowDownLeft,
   CheckCircle2, Clock, ChevronUp, Eye, CreditCard,
   Loader2, AlertCircle, CalendarDays, RotateCcw, FileText,
-  IndianRupee, Pencil, Plus, Trash2, Minus, Users, AlertTriangle, Bell,
+  IndianRupee, Pencil, Plus, Trash2, Minus, Users, AlertTriangle, Bell, UserCheck,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { InlineSettlePanel } from "../analytics/PartyDuesChart";
 
 // ── Type helpers (backward-compat) ────────────────────────────
 const isSale     = (t) => t === "Sale"     || t === "Given"  || t === "Sale Return";
@@ -60,6 +61,7 @@ function getPaymentTerms(tx) {
       amount: initialAmount,
       type: (tx.type === "Purchase" || tx.type === "Taken") ? "Payment to Supplier" : "Receipt from Customer",
       isInitial: true,
+      collectedBy: tx.lastCollectedBy || null,
     });
   }
 
@@ -72,6 +74,8 @@ function getPaymentTerms(tx) {
       amount: Number(log.amount) || 0,
       type: log.type || "Settlement Payment",
       isInitial: false,
+      collectedBy: log.collectedBy || log.collectedByOwner || null,
+      note: log.note || null,
       // payment mode fields
       paymentMode: log.paymentMode || null,
       paymentDate: log.paymentDate || null,
@@ -184,9 +188,17 @@ function InlineReturnView({ tx, uid, onDone }) {
   const [items, setItems] = useState((tx.sareeDetails || []).map((item) => ({ ...item, returnQty: "" })));
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
+  const [gstRate, setGstRate] = useState(String(Number(tx.gstRate) || 0));
+  const [gstMode, setGstMode] = useState("rate"); // "rate" | "custom"
+  const [customGstInput, setCustomGstInput] = useState("");
 
-  const returnTotal = items.reduce((sum, item) =>
+  const returnSubTotal = items.reduce((sum, item) =>
     sum + (Number(item.returnQty) || 0) * (Number(item.pricePerUnit) || 0), 0);
+  const gstRateNum  = parseFloat(gstRate) || 0;
+  const gstAmount   = gstMode === "custom"
+    ? parseFloat(customGstInput) || 0
+    : parseFloat((returnSubTotal * gstRateNum / 100).toFixed(2));
+  const returnTotal = parseFloat((returnSubTotal + gstAmount).toFixed(2));
 
   const handleSave = async () => {
     if (!items.some((item) => Number(item.returnQty) > 0)) {
@@ -210,11 +222,11 @@ function InlineReturnView({ tx, uid, onDone }) {
         partyName:       tx.partyName,
         type:            returnType,
         sareeDetails,
-        subTotalAmount:  parseFloat(returnTotal.toFixed(2)),
-        gstRate:         0,
-        gstAmount:       0,
-        totalAmount:     parseFloat(returnTotal.toFixed(2)),
-        amountPaid:      parseFloat(returnTotal.toFixed(2)),
+        subTotalAmount:  parseFloat(returnSubTotal.toFixed(2)),
+        gstRate:         gstRateNum,
+        gstAmount:       gstAmount,
+        totalAmount:     returnTotal,
+        amountPaid:      returnTotal,
         pendingDue:      0,
         status:          "Settled",
         transactionDate: returnDate,
@@ -309,15 +321,80 @@ function InlineReturnView({ tx, uid, onDone }) {
         </div>
       </div>
 
-      <div className={`rounded-xl px-3.5 py-2.5 flex justify-between items-center transition-all ${
-        returnTotal > 0 ? "bg-amber-500/10 border border-amber-500/25" : "bg-slate-800/40 border border-slate-700/40"
-      }`}>
-        <span className={`font-semibold text-xs ${returnTotal > 0 ? "text-amber-300" : "text-slate-500"}`}>
-          Total Return Value
-        </span>
-        <span className={`font-bold num text-sm ${returnTotal > 0 ? "text-amber-300" : "text-slate-600"}`}>
-          {fmtINR(returnTotal)}
-        </span>
+      {/* GST Section */}
+      <div className="field">
+        <label className="label text-xs flex items-center gap-1.5">
+          <IndianRupee className="w-3.5 h-3.5 text-emerald-400" /> GST
+        </label>
+        <div className="flex gap-2 flex-wrap">
+          {["0", "5", "12", "18"].map((r) => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => { setGstMode("rate"); setGstRate(r); }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                gstMode === "rate" && gstRate === r
+                  ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-300"
+                  : "bg-slate-800/60 border-slate-700/40 text-slate-400 hover:border-slate-600"
+              }`}
+            >
+              {r}%
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => { setGstMode("custom"); setGstRate("0"); }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+              gstMode === "custom"
+                ? "bg-violet-500/20 border-violet-500/50 text-violet-300"
+                : "bg-slate-800/60 border-slate-700/40 text-slate-400 hover:border-slate-600"
+            }`}
+          >
+            Custom ₹
+          </button>
+        </div>
+
+        {gstMode === "custom" && (
+          <div className="mt-2 relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-400 text-xs font-bold pointer-events-none">₹</span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={customGstInput}
+              onChange={(e) => setCustomGstInput(e.target.value)}
+              placeholder="Enter GST amount"
+              className="input-base pl-7 text-sm"
+              style={{ fontSize: "16px" }}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Summary breakdown */}
+      <div className="rounded-xl border border-slate-700/40 bg-slate-800/30 divide-y divide-slate-700/30 overflow-hidden">
+        <div className="flex justify-between items-center px-3.5 py-2">
+          <span className="text-slate-400 text-xs">Sub Total</span>
+          <span className="text-slate-200 font-semibold num text-xs">{fmtINR(returnSubTotal)}</span>
+        </div>
+        {gstAmount > 0 && (
+          <div className="flex justify-between items-center px-3.5 py-2">
+            <span className="text-emerald-400 text-xs">
+              GST {gstMode === "rate" ? `(${gstRateNum}%)` : "(custom)"}
+            </span>
+            <span className="text-emerald-300 font-semibold num text-xs">+ {fmtINR(gstAmount)}</span>
+          </div>
+        )}
+        <div className={`flex justify-between items-center px-3.5 py-2.5 ${
+          returnTotal > 0 ? "bg-amber-500/10" : ""
+        }`}>
+          <span className={`font-bold text-xs ${returnTotal > 0 ? "text-amber-300" : "text-slate-500"}`}>
+            Total Return Value
+          </span>
+          <span className={`font-bold num text-sm ${returnTotal > 0 ? "text-amber-300" : "text-slate-600"}`}>
+            {fmtINR(returnTotal)}
+          </span>
+        </div>
       </div>
 
       <div className="field">
@@ -1062,6 +1139,12 @@ function DetailDrawer({ tx, uid, parties = [], activeTab = "details", onTabChang
                                 </span>
                               );
                             })()}
+                            {term.collectedBy && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-semibold bg-amber-500/15 border-amber-500/30 text-amber-300">
+                                <UserCheck className="w-3 h-3 text-amber-400" />
+                                <span>Collected by: {term.collectedBy}</span>
+                              </span>
+                            )}
                           </div>
                           {/* Cheque extra dates */}
                           {term.paymentMode === "Cheque" && !term.isInitial && (
@@ -1202,7 +1285,15 @@ function DetailDrawer({ tx, uid, parties = [], activeTab = "details", onTabChang
           <InlineReturnView tx={tx} uid={uid} onDone={() => onTabChange("details")} />
         )}
 
-
+        {/* ── Subview 5: Settle Due Inline ── */}
+        {activeTab === "settle" && (
+          <InlineSettlePanel
+            tx={tx}
+            parties={parties}
+            uid={uid}
+            onDone={() => onTabChange("details")}
+          />
+        )}
       </div>
     </div>
   );
@@ -1574,7 +1665,14 @@ export default function TransactionHistoryTable({ transactions, loading, error }
                         </td>
                         <td className="table-td"><TypeBadge type={tx.type} /></td>
                         <td className="table-td text-right text-slate-200 font-semibold num text-sm">{fmtINR(tx.totalAmount)}</td>
-                        <td className="table-td text-right text-emerald-400 num text-sm">{fmtINR(tx.amountPaid)}</td>
+                        <td className="table-td text-right text-emerald-400 num text-sm">
+                          {fmtINR(tx.amountPaid)}
+                          {Number(tx.discount) > 0 && (
+                            <span className="block text-[10px] text-amber-400 font-medium">
+                              Disc: {fmtINR(tx.discount)}
+                            </span>
+                          )}
+                        </td>
                         <td className="table-td text-right num text-sm">
                           <span className={tx.pendingDue > 0 ? "text-amber-400 font-semibold" : "text-slate-500"}>
                             {fmtINR(tx.pendingDue)}
@@ -1752,7 +1850,14 @@ export default function TransactionHistoryTable({ transactions, loading, error }
                       </div>
                       <div className="bg-slate-800/60 rounded-xl p-1.5 min-w-0">
                         <p className="text-slate-500 text-[10px] uppercase tracking-wider truncate">Paid</p>
-                        <p className="text-emerald-400 font-bold text-xs num truncate">{fmtINR(tx.amountPaid)}</p>
+                        <p className="text-emerald-400 font-bold text-xs num truncate">
+                          {fmtINR(tx.amountPaid)}
+                          {Number(tx.discount) > 0 && (
+                            <span className="block text-[9px] text-amber-400 font-normal">
+                              Disc: {fmtINR(tx.discount)}
+                            </span>
+                          )}
+                        </p>
                       </div>
                       <div className="bg-slate-800/60 rounded-xl p-1.5 min-w-0">
                         <p className="text-slate-500 text-[10px] uppercase tracking-wider truncate">Due</p>

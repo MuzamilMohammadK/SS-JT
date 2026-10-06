@@ -23,6 +23,7 @@ import {
   Building2,
   Sparkles,
   PhoneCall,
+  User,
 } from "lucide-react";
 
 // ── Delete Confirm Dialog ─────────────────────────────────────
@@ -84,6 +85,10 @@ export default function RegisteredPartiesPage() {
     () => parties.filter((p) => p.type === "Supplier").length,
     [parties]
   );
+  const ownerCount = useMemo(
+    () => parties.filter((p) => p.type === "Owner").length,
+    [parties]
+  );
 
   // Filter & Sort
   const filteredParties = useMemo(() => {
@@ -96,13 +101,25 @@ export default function RegisteredPartiesPage() {
       if (!q) return true;
 
       const nameMatch = p.name?.toLowerCase().includes(q);
+      const ownerMatch =
+        (p.ownerName && p.ownerName.toLowerCase().includes(q)) ||
+        (p.owner && p.owner.toLowerCase().includes(q));
+      const gstinMatch = p.gstin && p.gstin.toLowerCase().includes(q);
       const mobMatch =
         p.mobiles?.some((m) => m.includes(q)) || (p.mobile && p.mobile.includes(q));
       const cityMatch = p.city?.toLowerCase().includes(q);
       const stateMatch = p.state?.toLowerCase().includes(q);
       const addressMatch = p.address?.toLowerCase().includes(q);
 
-      return nameMatch || mobMatch || cityMatch || stateMatch || addressMatch;
+      return (
+        nameMatch ||
+        ownerMatch ||
+        gstinMatch ||
+        mobMatch ||
+        cityMatch ||
+        stateMatch ||
+        addressMatch
+      );
     });
 
     // Sorting
@@ -221,6 +238,7 @@ export default function RegisteredPartiesPage() {
               { id: "all", label: "All" },
               { id: "Customer", label: `Customers (${customerCount})` },
               { id: "Supplier", label: `Suppliers (${supplierCount})` },
+              { id: "Owner", label: `Owners (${ownerCount})` },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -315,6 +333,8 @@ export default function RegisteredPartiesPage() {
               const avatarGradient =
                 party.type === "Customer"
                   ? "from-indigo-600 to-purple-600"
+                  : party.type === "Owner"
+                  ? "from-emerald-600 to-teal-600"
                   : "from-rose-600 to-pink-600";
 
               const allMobiles = party.mobiles?.length
@@ -357,10 +377,33 @@ export default function RegisteredPartiesPage() {
                         <div>
                           {party.type === "Customer" ? (
                             <span className="badge-indigo text-[10px]">Customer · Accounts Receivable</span>
+                          ) : party.type === "Owner" ? (
+                            <span className="badge-emerald text-[10px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 px-2.5 py-0.5 rounded-full font-semibold">
+                              Owner
+                            </span>
                           ) : (
                             <span className="badge-rose text-[10px]">Supplier · Accounts Payable</span>
                           )}
                         </div>
+
+                        {/* Owner Name */}
+                        {party.type !== "Owner" && (party.ownerName || party.owner) && (
+                          <p className="text-slate-400 text-xs mt-1.5 flex items-center gap-1.5 truncate">
+                            <User className="w-3 h-3 text-slate-500 flex-shrink-0" />
+                            <span>
+                              Owner: <strong className="text-slate-300 font-medium">{party.ownerName || party.owner}</strong>
+                            </span>
+                          </p>
+                        )}
+
+                        {/* GSTIN */}
+                        {party.gstin && (
+                          <div className="mt-1.5 flex items-center gap-1.5">
+                            <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-slate-800/90 text-indigo-300 border border-indigo-500/30">
+                              GSTIN: {party.gstin}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
 

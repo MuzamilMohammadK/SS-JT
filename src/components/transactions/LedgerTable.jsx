@@ -129,7 +129,14 @@ function TxRow({ tx, partyName, uid }) {
         </td>
         <td className="table-td"><TypeBadge type={tx.type} /></td>
         <td className="table-td text-slate-200 text-sm font-semibold whitespace-nowrap num">{fmt(tx.totalAmount)}</td>
-        <td className="table-td text-emerald-400 text-sm font-medium whitespace-nowrap num">{fmt(tx.amountPaid)}</td>
+        <td className="table-td text-emerald-400 text-sm font-medium whitespace-nowrap num">
+          {fmt(tx.amountPaid)}
+          {Number(tx.discount) > 0 && (
+            <span className="block text-[10px] text-amber-400 font-medium">
+              Disc: {fmt(tx.discount)}
+            </span>
+          )}
+        </td>
         <td className="table-td">
           <span className={`text-sm font-semibold whitespace-nowrap num ${tx.pendingDue > 0 ? "text-amber-400" : "text-slate-500"}`}>
             {fmt(tx.pendingDue)}
