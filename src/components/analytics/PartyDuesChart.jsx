@@ -1424,7 +1424,7 @@ export function InlineSettlePanel({ tx, parties = [], uid, initialBargainMode = 
         const blob = pdf.output("blob");
         const file = new File([blob], fileName, { type: "application/pdf" });
         if (navigator.canShare({ files: [file] })) {
-          await navigator.share({ files: [file], title: "Payment Receipt", text: `Payment receipt for ${savedData.partyName}` });
+          await navigator.share({ files: [file] });
           return;
         }
       } catch (e) { /* fall through */ }

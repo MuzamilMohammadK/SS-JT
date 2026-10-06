@@ -306,33 +306,13 @@ function generateSettledReceiptPDF(tx) {
 }
 
 // ── Share Settled Transaction Handler ──────────────────────────
-async function shareSettledTransaction(tx) {
+async function shareSettledTransaction(tx, mode = "pdf") {
   try {
-    const doc = generateSettledReceiptPDF(tx);
     const safeParty = (tx.partyName || "Party").replace(/[^a-zA-Z0-9_-]/g, "_");
     const invStr = tx.invoiceNumber ? `INV_${tx.invoiceNumber}_` : "";
     const fileName = `Settled_Receipt_${safeParty}_${invStr}${new Date().toISOString().slice(0, 10)}.pdf`;
-
-    if (navigator.canShare) {
-      try {
-        const blob = doc.output("blob");
-        const file = new File([blob], fileName, { type: "application/pdf" });
-        if (navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            files: [file],
-            title: `Settled Payment Receipt - ${tx.partyName}`,
-            text: `Payment Receipt for ${tx.partyName}${tx.invoiceNumber ? ` (Invoice #${tx.invoiceNumber})` : ""} - Fully Settled ✅`,
-          });
-          toast.success("Settled receipt shared successfully!");
-          return;
-        }
-      } catch (e) {
-        if (e.name === "AbortError") return;
-      }
-    }
-
-    doc.save(fileName);
     const dateStr = tx.transactionDate ? tx.transactionDate.split("-").reverse().join("/") : "";
+
     const lines = [
       `*PAYMENT SETTLEMENT RECEIPT*`,
       `Party: *${tx.partyName}*`,
@@ -346,11 +326,37 @@ async function shareSettledTransaction(tx) {
       `Remaining Due: *${fmtINR(0)}*`,
       `Status: ✅ *FULLY SETTLED*`,
       tx.lastCollectedBy ? `Collected By: ${tx.lastCollectedBy}` : null,
-      `-----------------------------`,
-      `_Receipt PDF downloaded to your device._`,
     ].filter(Boolean).join("\n");
 
-    window.open(`https://wa.me/?text=${encodeURIComponent(lines)}`, "_blank");
+    if (mode === "text") {
+      window.open(`https://wa.me/?text=${encodeURIComponent(lines)}`, "_blank");
+      toast.success("Opened WhatsApp with receipt text!");
+      return;
+    }
+
+    const doc = generateSettledReceiptPDF(tx);
+
+    // Try Web Share API with ONLY files array
+    // (Passing title or text alongside files causes Android WhatsApp to crash with "Can't send an empty message")
+    if (navigator.canShare) {
+      try {
+        const blob = doc.output("blob");
+        const file = new File([blob], fileName, { type: "application/pdf" });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+          });
+          toast.success("Settled receipt shared successfully!");
+          return;
+        }
+      } catch (e) {
+        if (e.name === "AbortError") return;
+        console.warn("navigator.share failed, falling back:", e);
+      }
+    }
+
+    doc.save(fileName);
+    window.open(`https://wa.me/?text=${encodeURIComponent(lines + "\n-----------------------------\n_Receipt PDF downloaded to device._")}`, "_blank");
     toast.success("Receipt PDF downloaded & WhatsApp opened!");
   } catch (err) {
     console.error("Error sharing settled receipt:", err);
@@ -359,8 +365,30 @@ async function shareSettledTransaction(tx) {
 }
 
 // ── Share Payment Term Handler ─────────────────────────────────
-async function sharePaymentTerm(tx, term) {
+async function sharePaymentTerm(tx, term, mode = "pdf") {
   try {
+    const tDate = term.date ? term.date.split("-").reverse().join("/") : "";
+    const lines = [
+      `*PAYMENT RECEIPT · ${term.title}*`,
+      `Party: *${tx.partyName}*`,
+      tx.invoiceNumber ? `Invoice #: *${tx.invoiceNumber}*` : null,
+      `Date: ${tDate}`,
+      term.paymentMode ? `Mode: ${term.paymentMode}` : null,
+      term.chequeNo ? `Cheque #: ${term.chequeNo}` : null,
+      term.neftRefNo ? `NEFT Ref: ${term.neftRefNo}` : null,
+      term.collectedBy ? `Collected By: ${term.collectedBy}` : null,
+      `-----------------------------`,
+      `Amount Paid: *${fmtINR(term.amount)}*`,
+      `Balance Due: *${fmtINR(term.balanceAfter)}*`,
+      term.balanceAfter <= 0.005 ? `Status: ✅ *FULLY SETTLED*` : null,
+    ].filter(Boolean).join("\n");
+
+    if (mode === "text") {
+      window.open(`https://wa.me/?text=${encodeURIComponent(lines)}`, "_blank");
+      toast.success("Opened WhatsApp with term receipt!");
+      return;
+    }
+
     const doc = new jsPDF({ unit: "pt", format: "a5" });
     const W = doc.internal.pageSize.getWidth();
     let y = 40;
@@ -383,7 +411,6 @@ async function sharePaymentTerm(tx, term) {
     doc.line(W / 2 - hw / 2, y, W / 2 + hw / 2, y); y += 20;
 
     txt(`Party: ${tx.partyName || "—"}`, 30, 10, "bold");
-    const tDate = term.date ? term.date.split("-").reverse().join("/") : "";
     txt(`Date: ${tDate}`, W - 30, 10, "normal", [80, 80, 80], "right"); y += 18;
     if (tx.invoiceNumber) {
       txt(`Invoice #${tx.invoiceNumber} · ${term.title}`, 30, 9, "bold", [79, 70, 229]); y += 14;
@@ -422,8 +449,6 @@ async function sharePaymentTerm(tx, term) {
         if (navigator.canShare({ files: [file] })) {
           await navigator.share({
             files: [file],
-            title: `Payment Receipt - ${term.title}`,
-            text: `Payment Receipt for ${tx.partyName} - ${term.title} (${fmtINR(term.amount)})`,
           });
           toast.success("Term receipt shared!");
           return;
@@ -434,19 +459,6 @@ async function sharePaymentTerm(tx, term) {
     }
 
     doc.save(fileName);
-    const lines = [
-      `*PAYMENT RECEIPT · ${term.title}*`,
-      `Party: *${tx.partyName}*`,
-      tx.invoiceNumber ? `Invoice #: *${tx.invoiceNumber}*` : null,
-      `Date: ${tDate}`,
-      term.paymentMode ? `Mode: ${term.paymentMode}` : null,
-      term.collectedBy ? `Collected By: ${term.collectedBy}` : null,
-      `-----------------------------`,
-      `Amount Paid: *${fmtINR(term.amount)}*`,
-      `Balance Due: *${fmtINR(term.balanceAfter)}*`,
-      term.balanceAfter <= 0.005 ? `Status: ✅ *FULLY SETTLED*` : null,
-    ].filter(Boolean).join("\n");
-
     window.open(`https://wa.me/?text=${encodeURIComponent(lines)}`, "_blank");
     toast.success("Receipt downloaded & WhatsApp opened!");
   } catch (err) {
@@ -622,7 +634,7 @@ function InlineReturnView({ tx, uid, onDone }) {
         const blob = pdf.output("blob");
         const file = new File([blob], fileName, { type: "application/pdf" });
         if (navigator.canShare({ files: [file] })) {
-          await navigator.share({ files: [file], title: `${savedData.returnType} Receipt`, text: `Return receipt for ${savedData.partyName}` });
+          await navigator.share({ files: [file] });
           return;
         }
       } catch (e) {
@@ -1738,15 +1750,25 @@ function DetailDrawer({ tx, uid, parties = [], activeTab = "details", onTabChang
             {/* Settled Transaction Action: Share & Delete Buttons */}
             {tx.status === "Settled" && (
               <div className="border-t border-slate-800 pt-3 flex items-center justify-between gap-2 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => shareSettledTransaction(tx)}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-sm transition-all active:scale-95"
-                  title="Share settled receipt via WhatsApp / PDF"
-                >
-                  <Share2 className="w-3.5 h-3.5" />
-                  <span>Share Receipt on WhatsApp (PDF)</span>
-                </button>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => shareSettledTransaction(tx, "pdf")}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-sm transition-all active:scale-95"
+                    title="Share settled receipt PDF via WhatsApp"
+                  >
+                    <Share2 className="w-3.5 h-3.5" />
+                    <span>Share PDF</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => shareSettledTransaction(tx, "text")}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-700/80 hover:bg-emerald-600 border border-emerald-500/40 text-emerald-100 text-xs font-semibold shadow-sm transition-all active:scale-95"
+                    title="Send receipt text directly to WhatsApp"
+                  >
+                    <span>💬 WhatsApp Text</span>
+                  </button>
+                </div>
                 {onDelete && (
                   <button
                     type="button"
